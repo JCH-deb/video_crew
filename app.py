@@ -1,13 +1,14 @@
 import streamlit as st
 import os
-from crewai import Agent, Task, Crew, Process, LLM
+from crewai import Agent, Task, Crew, Process
+from langchain_google_genai import ChatGoogleGenerativeAI
 
-st.set_page_config(page_title="Videos Crew", page_icon="🎬", layout="wide")
+st.set_page_config(page_title="Generador de Videos", page_icon="🎬", layout="wide")
 
-st.title("Videos Crew")
+st.title("🎬 Generador de Videos con IA")
 st.write("Define tu concepto y deja que el equipo de agentes redacte la guía de producción.")
 
-# Panel lateral para la clave
+# Panel lateral
 st.sidebar.header("Configuración")
 api_key = st.sidebar.text_input("Ingresa tu Gemini API Key:", type="password")
 
@@ -25,8 +26,9 @@ if st.button("Generar Guion de Producción"):
         st.error("Por favor, ingresa tu API Key en el menú lateral izquierdo.")
     else:
         with st.spinner("El equipo está trabajando. Esto tomará 1 o 2 minutos..."):
+            # Conexión directa y robusta con LangChain
             os.environ["GEMINI_API_KEY"] = api_key
-            gemini_llm = LLM(model="gemini/gemini-3.5-flash")
+            gemini_llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=api_key)
 
             # Agentes
             director = Agent(
@@ -53,7 +55,7 @@ if st.button("Generar Guion de Producción"):
             t_letras = Task(description=f"Integra esta letra orgánicamente en la escena: '{letra}'.", expected_output="Propuesta tipográfica.", agent=tipografo)
             t_color = Task(description=f"Define la teoría de color para la escena con estética '{estilo}'.", expected_output="Guía de etalonaje.", agent=colorista)
 
-            # Orquestación (Síncrono normal, ya que no estamos en Colab)
+            # Orquestación
             equipo = Crew(agents=[director, tipografo, colorista], tasks=[t_escenas, t_letras, t_color], process=Process.sequential)
             
             resultado = equipo.kickoff()
