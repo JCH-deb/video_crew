@@ -1,18 +1,15 @@
 import streamlit as st
 import os
 from crewai import Agent, Task, Crew, Process
-from langchain_google_genai import ChatGoogleGenerativeAI
 
 st.set_page_config(page_title="Generador de Videos", page_icon="🎬", layout="wide")
 
 st.title("🎬 Generador de Videos con IA")
 st.write("Define tu concepto y deja que el equipo de agentes redacte la guía de producción.")
 
-# Panel lateral
 st.sidebar.header("Configuración")
 api_key = st.sidebar.text_input("Ingresa tu Gemini API Key:", type="password")
 
-# Interfaz principal
 col1, col2 = st.columns(2)
 with col1:
     cancion = st.text_input("Canción:", "Boulevard of Broken Dreams")
@@ -26,28 +23,31 @@ if st.button("Generar Guion de Producción"):
         st.error("Por favor, ingresa tu API Key en el menú lateral izquierdo.")
     else:
         with st.spinner("El equipo está trabajando. Esto tomará 1 o 2 minutos..."):
-            # Conexión directa y robusta con LangChain
+            
+            # 1. Le damos la clave directamente al sistema operativo virtual
             os.environ["GEMINI_API_KEY"] = api_key
-            gemini_llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=api_key)
+            
+            # 2. Usamos el formato de texto simple que exige CrewAI
+            modelo_gemini = "gemini/gemini-1.5-flash"
 
             # Agentes
             director = Agent(
                 role="Director de Escena",
                 goal="Diseñar la narrativa visual, cámara y luz.",
                 backstory="Cineasta experto en trasladar emociones a movimientos de cámara.",
-                llm=gemini_llm
+                llm=modelo_gemini
             )
             tipografo = Agent(
                 role="Diseñador de Tipografía",
                 goal="Integrar la letra de la canción en el entorno.",
                 backstory="Diseñador gráfico. Integras letras en luces, reflejos o humo.",
-                llm=gemini_llm
+                llm=modelo_gemini
             )
             colorista = Agent(
                 role="Colorista",
                 goal="Establecer paleta de colores y contraste.",
                 backstory="Especialista en etalonaje que traduce moods a colores precisos.",
-                llm=gemini_llm
+                llm=modelo_gemini
             )
 
             # Tareas
