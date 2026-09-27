@@ -26,7 +26,9 @@ def cargar_plantillas_notion():
             props = page["properties"]
             try:
                 nombre = props["Nombre"]["title"][0]["text"]["content"]
-                contenido = props["Contenido"]["rich_text"][0]["text"]["content"]
+                # Unimos todos los fragmentos por si el texto era mayor a 2000 caracteres
+                fragmentos_texto = props["Contenido"]["rich_text"]
+                contenido = "".join([frag["text"]["content"] for frag in fragmentos_texto])
                 plantillas[nombre] = contenido
             except (KeyError, IndexError):
                 continue
@@ -34,11 +36,16 @@ def cargar_plantillas_notion():
 
 def guardar_plantilla_notion(nombre, contenido):
     url = "https://api.notion.com/v1/pages"
+    
+    # Truco para evadir el límite de 2000 caracteres de Notion
+    fragmentos = [contenido[i:i+2000] for i in range(0, len(contenido), 2000)]
+    arreglo_rich_text = [{"text": {"content": frag}} for frag in fragmentos]
+    
     data = {
         "parent": {"database_id": DB_PLANTILLAS_ID},
         "properties": {
             "Nombre": {"title": [{"text": {"content": nombre}}]},
-            "Contenido": {"rich_text": [{"text": {"content": contenido}}]}
+            "Contenido": {"rich_text": arreglo_rich_text}
         }
     }
     response = requests.post(url, headers=HEADERS, json=data)
