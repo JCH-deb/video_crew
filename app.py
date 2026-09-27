@@ -21,7 +21,6 @@ if not st.session_state['autenticado']:
     st.stop()
 
 # --- 2. BASE DE DATOS DE PLANTILLAS EN MEMORIA ---
-# Si es la primera vez que abre la app en la sesión, cargamos las base
 if 'plantillas' not in st.session_state:
     st.session_state['plantillas'] = {
         "Test Ubicación - Msj 1 (Bienvenida)": "¡Bienvenidos al Curso de Preparación!\n[CLASE]\n\nEl horario será de [HORARIO] con el docente [DOCENTE].\nEnlace: [LINK_CLASES]",
@@ -41,65 +40,116 @@ tab1, tab2, tab3 = st.tabs(["💬 Mensajería Editable", "📅 Calendario de Mó
 with tab1:
     st.header("Librería de Plantillas y Generador")
     
-    st.subheader("1. Llena las variables del curso actual")
-    col1, col2, col3 = st.columns(3)
-    with col1:
+    # --- VARIABLES GENERALES ---
+    st.subheader("1. Variables Generales")
+    col_g1, col_g2, col_g3 = st.columns(3)
+    with col_g1:
         clase_id = st.text_input("ID de la Clase:", "CLASS 245 - 5to nivel")
+    with col_g2:
         docente = st.text_input("Nombre del Docente:", "Jordy Chafuel")
+    with col_g3:
         horario = st.text_input("Horario:", "7-9 p.m.")
-    with col2:
-        fecha_inicio = st.text_input("Fecha Inicio / Fecha Test:", "03 de agosto")
-        fecha_fin = st.text_input("Fecha Fin:", "28 de agosto")
-        fecha_speaking = st.text_input("Límite Speaking:", "Viernes 31 de julio, 09:00 a.m.")
-    with col3:
-        link_clases = st.text_input("Enlace Clases Grabadas:", "https://drive.google.com/...")
-        horario_test = st.text_input("Hora Test / Límite:", "09:00 a.m.")
+
+    # Diccionario maestro que guardará todas las variables a inyectar
+    reemplazos = {
+        "[CLASE]": clase_id,
+        "[DOCENTE]": docente,
+        "[HORARIO]": horario
+    }
 
     st.divider()
 
+    # --- SELECTOR DE FLUJO ---
+    flujo = st.radio("Selecciona el proceso para cargar las variables específicas:", ["Test de Ubicación", "Curso Intensivo"], horizontal=True)
+
+    if flujo == "Test de Ubicación":
+        st.subheader("Variables del Test de Ubicación")
+        col1, col2 = st.columns(2)
+        with col1:
+            fecha_test = st.text_input("Fecha del Test:", "Sábado 01 de agosto, 2026")
+            horario_test = st.text_input("Horario del Test:", "09:00 a.m. a 11:00 a.m.")
+            fecha_speaking = st.text_input("Fecha Límite Speaking:", "Viernes 31 de julio 2026, 09:00 a.m.")
+        with col2:
+            link_clases = st.text_input("Enlace Clases Grabadas:", "https://drive.google.com/...")
+            link_test = st.text_input("Enlace del Test:", "https://forms.gle/...")
+            clave_test = st.text_input("Clave del Test:", "EXTES2026@T45")
+            
+        reemplazos.update({
+            "[FECHA_TEST]": fecha_test,
+            "[HORARIO_TEST]": horario_test,
+            "[FECHA_SPEAKING]": fecha_speaking,
+            "[LINK_CLASES]": link_clases,
+            "[LINK_TEST]": link_test,
+            "[CLAVE_TEST]": clave_test
+        })
+
+    else:
+        st.subheader("Variables del Curso Intensivo")
+        col1, col2 = st.columns(2)
+        with col1:
+            fecha_inicio = st.text_input("Fecha Inicio:", "03 de agosto")
+            fecha_fin = st.text_input("Fecha Fin:", "28 de agosto")
+            fecha_escrito = st.text_input("Fecha Examen Escrito:", "JUEVES 27 DE AGOSTO, 2026 - DE 7-9 PM")
+            fecha_speaking_int = st.text_input("Límite Speaking:", "MIÉRCOLES 26 DE AGOSTO 2026 - 3PM")
+            fecha_resultados = st.text_input("Fecha Resultados:", "SÁBADO 29 DE AGOSTO, 2026")
+        with col2:
+            link_clases_int = st.text_input("Enlace Clases Grabadas (Intensivo):", "https://drive.google.com/...")
+            link_listening = st.text_input("Link Listening:", "https://forms.gle/...")
+            link_reading = st.text_input("Link Reading:", "https://forms.gle/...")
+            link_writing = st.text_input("Link Writing:", "https://forms.gle/...")
+            clave_general = st.text_input("Clave General Exámenes:", "TEX2026@45AG")
+            
+        reemplazos.update({
+            "[FECHA_INICIO]": fecha_inicio,
+            "[FECHA_FIN]": fecha_fin,
+            "[FECHA_ESCRITO]": fecha_escrito,
+            "[FECHA_SPEAKING]": fecha_speaking_int,
+            "[FECHA_RESULTADOS]": fecha_resultados,
+            "[LINK_CLASES]": link_clases_int,
+            "[LINK_LISTENING]": link_listening,
+            "[LINK_READING]": link_reading,
+            "[LINK_WRITING]": link_writing,
+            "[CLAVE_GENERAL]": clave_general
+        })
+
+    st.divider()
+
+    # --- EDITOR Y GESTOR ---
     st.subheader("2. Editor y Gestor de Plantillas")
     
-    # Selector de la plantilla actual
     nombres_plantillas = list(st.session_state['plantillas'].keys())
     if nombres_plantillas:
         seleccion = st.selectbox("Selecciona la plantilla a utilizar:", nombres_plantillas)
         texto_a_editar = st.text_area("Editor de Plantilla (Modifica aquí el texto):", value=st.session_state['plantillas'][seleccion], height=300)
         
-        # Botones de Acción Rápida (Procesar vs Guardar)
         col_proc, col_act, col_del = st.columns([2, 2, 1])
         
         with col_proc:
-            if st.button("🚀 Procesar Mensaje (Inyectar Variables)", type="primary"):
-                resultado = texto_a_editar.replace("[CLASE]", clase_id)
-                resultado = resultado.replace("[DOCENTE]", docente)
-                resultado = resultado.replace("[HORARIO]", horario)
-                resultado = resultado.replace("[FECHA_TEST]", fecha_inicio)
-                resultado = resultado.replace("[FECHA_INICIO]", fecha_inicio)
-                resultado = resultado.replace("[FECHA_FIN]", fecha_fin)
-                resultado = resultado.replace("[FECHA_SPEAKING]", fecha_speaking)
-                resultado = resultado.replace("[HORARIO_TEST]", horario_test)
-                resultado = resultado.replace("[LINK_CLASES]", link_clases)
+            if st.button("🚀 Procesar Mensaje", type="primary"):
+                resultado = texto_a_editar
+                # Reemplaza dinámicamente usando el diccionario
+                for etiqueta, valor in reemplazos.items():
+                    resultado = resultado.replace(etiqueta, valor)
                 
                 st.success("¡Texto listo para enviar!")
                 st.text_area("Copia este texto para WhatsApp:", value=resultado, height=300)
                 
         with col_act:
-            if st.button("💾 Guardar cambios en esta plantilla"):
+            if st.button("💾 Guardar cambios"):
                 st.session_state['plantillas'][seleccion] = texto_a_editar
                 st.success(f"Plantilla '{seleccion}' actualizada.")
                 
         with col_del:
-            if st.button("🗑️ Eliminar Plantilla"):
+            if st.button("🗑️ Eliminar"):
                 del st.session_state['plantillas'][seleccion]
                 st.rerun()
     else:
-        st.warning("No hay plantillas guardadas. Crea una nueva abajo.")
+        st.warning("No hay plantillas guardadas.")
 
-    # --- AGREGAR NUEVA PLANTILLA ---
     st.divider()
     with st.expander("➕ Crear Nueva Plantilla"):
         nuevo_nombre = st.text_input("Nombre de la nueva plantilla (Ej: Intensivo - Recordatorio):")
-        nuevo_texto = st.text_area("Escribe el texto base usando las variables en MAYÚSCULAS:", height=200)
+        nuevo_texto = st.text_area("Escribe el texto base usando las etiquetas permitidas:", height=200)
         
         if st.button("Agregar a la Librería"):
             if nuevo_nombre and nuevo_texto:
@@ -110,7 +160,7 @@ with tab1:
                     st.success("Plantilla agregada correctamente.")
                     st.rerun()
             else:
-                st.warning("Debes ponerle un nombre y un texto para guardarla.")
+                st.warning("Debes ponerle un nombre y un texto.")
 
 # --- PESTAÑA 2: CALENDARIO ---
 with tab2:
