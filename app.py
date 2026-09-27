@@ -1,7 +1,54 @@
 import streamlit as st
+import requests
 from datetime import datetime, timedelta
 
 st.set_page_config(page_title="INED Workspace", page_icon="🔐", layout="wide")
+
+# --- CONFIGURACIÓN DE NOTION ---
+# 1. Pega aquí tu Internal Integration Secret (empieza con secret_)
+NOTION_TOKEN = "secret_PEGA_TU_TOKEN_AQUI"
+
+# 2. Pega aquí el ID de la base de datos de PLANTILLAS (32 caracteres del enlace)
+DB_PLANTILLAS_ID = "PEGA_AQUI_EL_ID_DE_PLANTILLAS"
+
+# 3. Pega aquí el ID de la base de datos del CHECKLIST (32 caracteres del enlace)
+DB_CHECKLIST_ID = "PEGA_AQUI_EL_ID_DEL_CHECKLIST"
+
+HEADERS = {
+    "Authorization": f"Bearer {NOTION_TOKEN}",
+    "Content-Type": "application/json",
+    "Notion-Version": "2022-06-28"
+}
+
+# --- FUNCIONES DE NOTION ---
+def cargar_plantillas_notion():
+    url = f"https://api.notion.com/v1/databases/{DB_PLANTILLAS_ID}/query"
+    response = requests.post(url, headers=HEADERS)
+    plantillas = {}
+    if response.status_code == 200:
+        resultados = response.json().get("results", [])
+        for page in resultados:
+            props = page["properties"]
+            # Extraer Nombre y Contenido (ajusta los nombres si en Notion se llaman distinto)
+            try:
+                nombre = props["Nombre"]["title"][0]["text"]["content"]
+                contenido = props["Contenido"]["rich_text"][0]["text"]["content"]
+                plantillas[nombre] = contenido
+            except (KeyError, IndexError):
+                continue
+    return plantillas
+
+def guardar_plantilla_notion(nombre, contenido):
+    url = "https://api.notion.com/v1/pages"
+    data = {
+        "parent": {"database_id": DB_PLANTILLAS_ID},
+        "properties": {
+            "Nombre": {"title": [{"text": {"content": nombre}}]},
+            "Contenido": {"rich_text": [{"text": {"content": contenido}}]}
+        }
+    }
+    response = requests.post(url, headers=HEADERS, json=data)
+    return response.status_code == 200
 
 # --- 1. SISTEMA DE AUTENTICACIÓN ---
 if 'autenticado' not in st.session_state:
@@ -9,8 +56,6 @@ if 'autenticado' not in st.session_state:
 
 if not st.session_state['autenticado']:
     st.title("🔐 Acceso Restringido - INED")
-    st.write("Por favor, ingresa tu credencial para acceder al panel administrativo.")
-    
     pwd = st.text_input("Contraseña:", type="password")
     if st.button("Entrar"):
         if pwd == "ined2026":  
@@ -20,13 +65,16 @@ if not st.session_state['autenticado']:
             st.error("Credencial incorrecta.")
     st.stop()
 
-# --- 2. BASE DE DATOS DE PLANTILLAS EN MEMORIA ---
+# --- 2. CARGA DE BASE DE DATOS EN MEMORIA ---
 if 'plantillas' not in st.session_state:
-    st.session_state['plantillas'] = {
-        "Test Ubicación - Msj 1 (Bienvenida)": "¡Bienvenidos al Curso de Preparación!\n[CLASE]\n\nEl horario será de [HORARIO] con el docente [DOCENTE].\nEnlace: [LINK_CLASES]",
-        "Test Ubicación - Msj 2 (Instrucciones)": "🔴 Test de ubicación [FECHA_TEST]\nHorario: [HORARIO_TEST]\n\nRecuerda enviar el speaking hasta: [FECHA_SPEAKING]",
-        "Intensivo - Msj 1 (Bienvenida)": "Bienvenidos al curso intensivo [CLASE].\nIniciamos el [FECHA_INICIO] y finalizamos el [FECHA_FIN].\nEnlace: [LINK_CLASES]"
-    }
+    # Intenta cargar desde Notion; si falla, pone unas de ejemplo
+    plantillas_notion = cargar_plantillas_notion()
+    if plantillas_notion:
+        st.session_state['plantillas'] = plantillas_notion
+    else:
+        st.session_state['plantillas'] = {
+            "Plantilla de Ejemplo": "Conecta Notion para ver tus plantillas reales. [CLASE]"
+        }
 
 # --- 3. INTERFAZ PRINCIPAL ---
 st.title("⚙️ INED Workspace & Automation")
@@ -39,8 +87,6 @@ tab1, tab2, tab3 = st.tabs(["💬 Mensajería Editable", "📅 Calendario de Mó
 # --- PESTAÑA 1: MENSAJERÍA ---
 with tab1:
     st.header("Librería de Plantillas y Generador")
-    
-    # --- VARIABLES GENERALES ---
     st.subheader("1. Variables Generales")
     col_g1, col_g2, col_g3 = st.columns(3)
     with col_g1:
@@ -50,20 +96,12 @@ with tab1:
     with col_g3:
         horario = st.text_input("Horario:", "7-9 p.m.")
 
-    # Diccionario maestro que guardará todas las variables a inyectar
-    reemplazos = {
-        "[CLASE]": clase_id,
-        "[DOCENTE]": docente,
-        "[HORARIO]": horario
-    }
-
+    reemplazos = {"[CLASE]": clase_id, "[DOCENTE]": docente, "[HORARIO]": horario}
     st.divider()
 
-    # --- SELECTOR DE FLUJO ---
     flujo = st.radio("Selecciona el proceso para cargar las variables específicas:", ["Test de Ubicación", "Curso Intensivo"], horizontal=True)
 
     if flujo == "Test de Ubicación":
-        st.subheader("Variables del Test de Ubicación")
         col1, col2 = st.columns(2)
         with col1:
             fecha_test = st.text_input("Fecha del Test:", "Sábado 01 de agosto, 2026")
@@ -75,16 +113,10 @@ with tab1:
             clave_test = st.text_input("Clave del Test:", "EXTES2026@T45")
             
         reemplazos.update({
-            "[FECHA_TEST]": fecha_test,
-            "[HORARIO_TEST]": horario_test,
-            "[FECHA_SPEAKING]": fecha_speaking,
-            "[LINK_CLASES]": link_clases,
-            "[LINK_TEST]": link_test,
-            "[CLAVE_TEST]": clave_test
+            "[FECHA_TEST]": fecha_test, "[HORARIO_TEST]": horario_test, "[FECHA_SPEAKING]": fecha_speaking,
+            "[LINK_CLASES]": link_clases, "[LINK_TEST]": link_test, "[CLAVE_TEST]": clave_test
         })
-
     else:
-        st.subheader("Variables del Curso Intensivo")
         col1, col2 = st.columns(2)
         with col1:
             fecha_inicio = st.text_input("Fecha Inicio:", "03 de agosto")
@@ -93,115 +125,86 @@ with tab1:
             fecha_speaking_int = st.text_input("Límite Speaking:", "MIÉRCOLES 26 DE AGOSTO 2026 - 3PM")
             fecha_resultados = st.text_input("Fecha Resultados:", "SÁBADO 29 DE AGOSTO, 2026")
         with col2:
-            link_clases_int = st.text_input("Enlace Clases Grabadas (Intensivo):", "https://drive.google.com/...")
+            link_clases_int = st.text_input("Enlace Clases Grabadas:", "https://drive.google.com/...")
             link_listening = st.text_input("Link Listening:", "https://forms.gle/...")
             link_reading = st.text_input("Link Reading:", "https://forms.gle/...")
             link_writing = st.text_input("Link Writing:", "https://forms.gle/...")
             clave_general = st.text_input("Clave General Exámenes:", "TEX2026@45AG")
             
         reemplazos.update({
-            "[FECHA_INICIO]": fecha_inicio,
-            "[FECHA_FIN]": fecha_fin,
-            "[FECHA_ESCRITO]": fecha_escrito,
-            "[FECHA_SPEAKING]": fecha_speaking_int,
-            "[FECHA_RESULTADOS]": fecha_resultados,
-            "[LINK_CLASES]": link_clases_int,
-            "[LINK_LISTENING]": link_listening,
-            "[LINK_READING]": link_reading,
-            "[LINK_WRITING]": link_writing,
-            "[CLAVE_GENERAL]": clave_general
+            "[FECHA_INICIO]": fecha_inicio, "[FECHA_FIN]": fecha_fin, "[FECHA_ESCRITO]": fecha_escrito,
+            "[FECHA_SPEAKING]": fecha_speaking_int, "[FECHA_RESULTADOS]": fecha_resultados,
+            "[LINK_CLASES]": link_clases_int, "[LINK_LISTENING]": link_listening,
+            "[LINK_READING]": link_reading, "[LINK_WRITING]": link_writing, "[CLAVE_GENERAL]": clave_general
         })
 
     st.divider()
 
-    # --- EDITOR Y GESTOR ---
     st.subheader("2. Editor y Gestor de Plantillas")
-    
     nombres_plantillas = list(st.session_state['plantillas'].keys())
     if nombres_plantillas:
         seleccion = st.selectbox("Selecciona la plantilla a utilizar:", nombres_plantillas)
-        texto_a_editar = st.text_area("Editor de Plantilla (Modifica aquí el texto):", value=st.session_state['plantillas'][seleccion], height=300)
+        texto_a_editar = st.text_area("Editor de Plantilla:", value=st.session_state['plantillas'][seleccion], height=300)
         
-        col_proc, col_act, col_del = st.columns([2, 2, 1])
-        
+        col_proc, col_act = st.columns(2)
         with col_proc:
             if st.button("🚀 Procesar Mensaje", type="primary"):
                 resultado = texto_a_editar
-                # Reemplaza dinámicamente usando el diccionario
                 for etiqueta, valor in reemplazos.items():
                     resultado = resultado.replace(etiqueta, valor)
-                
                 st.success("¡Texto listo para enviar!")
                 st.text_area("Copia este texto para WhatsApp:", value=resultado, height=300)
                 
         with col_act:
-            if st.button("💾 Guardar cambios"):
-                st.session_state['plantillas'][seleccion] = texto_a_editar
-                st.success(f"Plantilla '{seleccion}' actualizada.")
-                
-        with col_del:
-            if st.button("🗑️ Eliminar"):
-                del st.session_state['plantillas'][seleccion]
-                st.rerun()
+            if st.button("💾 Guardar cambios en Notion"):
+                if guardar_plantilla_notion(seleccion, texto_a_editar):
+                    st.session_state['plantillas'][seleccion] = texto_a_editar
+                    st.success(f"Plantilla '{seleccion}' actualizada en Notion.")
+                else:
+                    st.error("Error al conectar con Notion. Verifica tu Token y el ID.")
     else:
-        st.warning("No hay plantillas guardadas.")
+        st.warning("No hay plantillas. Crea una abajo o revisa tu conexión a Notion.")
 
     st.divider()
     with st.expander("➕ Crear Nueva Plantilla"):
-        nuevo_nombre = st.text_input("Nombre de la nueva plantilla (Ej: Intensivo - Recordatorio):")
-        nuevo_texto = st.text_area("Escribe el texto base usando las etiquetas permitidas:", height=200)
+        nuevo_nombre = st.text_input("Nombre de la nueva plantilla (Ej: Recordatorio B1):")
+        nuevo_texto = st.text_area("Escribe el texto base con etiquetas:", height=200)
         
-        if st.button("Agregar a la Librería"):
+        if st.button("Guardar en Notion y Librería"):
             if nuevo_nombre and nuevo_texto:
-                if nuevo_nombre in st.session_state['plantillas']:
-                    st.error("Ya existe una plantilla con ese nombre.")
-                else:
+                if guardar_plantilla_notion(nuevo_nombre, nuevo_texto):
                     st.session_state['plantillas'][nuevo_nombre] = nuevo_texto
-                    st.success("Plantilla agregada correctamente.")
+                    st.success("Plantilla guardada permanentemente.")
                     st.rerun()
-            else:
-                st.warning("Debes ponerle un nombre y un texto.")
+                else:
+                    st.error("Error al guardar en Notion.")
 
 # --- PESTAÑA 2: CALENDARIO ---
 with tab2:
     st.header("Calculadora de Periodos Académicos")
-    st.write("Genera el historial cronológico de los 5 niveles. Ingresa la fecha de inicio del último curso (Nivel 5).")
-    
     col_c1, col_c2 = st.columns(2)
     with col_c1:
-        # La fecha de inicio del periodo final
         fecha_inicio_ultimo = st.date_input("Fecha de Inicio (Último periodo):", value=datetime(2026, 10, 5).date())
     with col_c2:
-        # Calcula el final automáticamente (suma 25 días para caer en viernes)
         fecha_fin_calculada = fecha_inicio_ultimo + timedelta(days=25)
         st.date_input("Fecha de Finalización (Calculada):", value=fecha_fin_calculada, disabled=True)
         
     if st.button("Generar Tabla de Periodos"):
         periodos = []
-        
-        # El periodo ingresado es el nivel 5. Calculamos el nivel 1 restando 4 bloques de 28 días.
         inicio_nivel_1 = fecha_inicio_ultimo - timedelta(days=28 * 4)
-        
         for i in range(1, 6):
             inicio_mod = inicio_nivel_1 + timedelta(days=28 * (i - 1))
             fin_mod = inicio_mod + timedelta(days=25)
             
-            # Formatear la fecha (Ej: June 15, 2026). El replace quita el cero a la izquierda de los días (05 -> 5)
             inicio_str = inicio_mod.strftime("%B %d, %Y").replace(" 0", " ")
             fin_str = fin_mod.strftime("%B %d, %Y").replace(" 0", " ")
-            
-            periodos.append({
-                "Periodo": f"{i}.",
-                "Fecha de Inicio": inicio_str,
-                "Fecha de Finalización": fin_str
-            })
-            
-        # Streamlit renderiza automáticamente las listas de diccionarios como tablas estáticas
+            periodos.append({"Periodo": f"{i}.", "Fecha de Inicio": inicio_str, "Fecha de Finalización": fin_str})
         st.table(periodos)
 
 # --- PESTAÑA 3: CHECKLIST Y NOTION ---
 with tab3:
     st.header("Flujo de Documentación")
+    st.write("Sincronización con tablero Kanban en construcción (Requiere configurar base de datos Checklist).")
     estados = ["Iniciado", "En proceso", "En revisión", "2da revisión", "Terminado"]
     documentos = ["Statements", "Certificates", "Id1", "Id2", "Carta de Ubicación", "Carta de Aprobación", "Actas", "Data Base", "Notas", "Best Student (1)"]
     for doc in documentos:
