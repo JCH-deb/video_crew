@@ -1,4 +1,5 @@
 import streamlit as st
+import os
 from crewai import Agent, Task, Crew, Process, LLM
 
 st.set_page_config(page_title="Generador de Videos", page_icon="🎬", layout="wide")
@@ -22,42 +23,49 @@ if st.button("Generar Guion de Producción"):
         st.error("Por favor, ingresa tu API Key en el menú lateral izquierdo.")
     else:
         with st.spinner("El equipo está trabajando. Esto tomará 1 o 2 minutos..."):
-            
-            # Pasamos la clave EXPLÍCITAMENTE al objeto LLM
-            mi_llm = LLM(
-                model="gemini/gemini-1.5-flash",
-                api_key=api_key
-            )
+            try:
+                # 1. Limpiamos espacios accidentales
+                key_limpia = api_key.strip()
+                
+                # 2. Forzamos TODAS las variables que las sub-librerías podrían buscar
+                os.environ["GEMINI_API_KEY"] = key_limpia
+                os.environ["GOOGLE_API_KEY"] = key_limpia
+                
+                mi_llm = LLM(
+                    model="gemini/gemini-1.5-flash",
+                    api_key=key_limpia
+                )
 
-            # Agentes
-            director = Agent(
-                role="Director de Escena",
-                goal="Diseñar la narrativa visual, cámara y luz.",
-                backstory="Cineasta experto en trasladar emociones a movimientos de cámara.",
-                llm=mi_llm
-            )
-            tipografo = Agent(
-                role="Diseñador de Tipografía",
-                goal="Integrar la letra de la canción en el entorno.",
-                backstory="Diseñador gráfico. Integras letras en luces, reflejos o humo.",
-                llm=mi_llm
-            )
-            colorista = Agent(
-                role="Colorista",
-                goal="Establecer paleta de colores y contraste.",
-                backstory="Especialista en etalonaje que traduce moods a colores precisos.",
-                llm=mi_llm
-            )
+                director = Agent(
+                    role="Director de Escena",
+                    goal="Diseñar la narrativa visual, cámara y luz.",
+                    backstory="Cineasta experto en trasladar emociones a movimientos de cámara.",
+                    llm=mi_llm
+                )
+                tipografo = Agent(
+                    role="Diseñador de Tipografía",
+                    goal="Integrar la letra de la canción en el entorno.",
+                    backstory="Diseñador gráfico. Integras letras en luces, reflejos o humo.",
+                    llm=mi_llm
+                )
+                colorista = Agent(
+                    role="Colorista",
+                    goal="Establecer paleta de colores y contraste.",
+                    backstory="Especialista en etalonaje que traduce moods a colores precisos.",
+                    llm=mi_llm
+                )
 
-            # Tareas
-            t_escenas = Task(description=f"Diseña la escena de apertura para '{cancion}' ({tempo}) estilo '{estilo}'.", expected_output="Descripción de escena y cámara.", agent=director)
-            t_letras = Task(description=f"Integra esta letra orgánicamente en la escena: '{letra}'.", expected_output="Propuesta tipográfica.", agent=tipografo)
-            t_color = Task(description=f"Define la teoría de color para la escena con estética '{estilo}'.", expected_output="Guía de etalonaje.", agent=colorista)
+                t_escenas = Task(description=f"Diseña la escena de apertura para '{cancion}' ({tempo}) estilo '{estilo}'.", expected_output="Descripción de escena y cámara.", agent=director)
+                t_letras = Task(description=f"Integra esta letra orgánicamente en la escena: '{letra}'.", expected_output="Propuesta tipográfica.", agent=tipografo)
+                t_color = Task(description=f"Define la teoría de color para la escena con estética '{estilo}'.", expected_output="Guía de etalonaje.", agent=colorista)
 
-            # Orquestación
-            equipo = Crew(agents=[director, tipografo, colorista], tasks=[t_escenas, t_letras, t_color], process=Process.sequential)
-            
-            resultado = equipo.kickoff()
+                equipo = Crew(agents=[director, tipografo, colorista], tasks=[t_escenas, t_letras, t_color], process=Process.sequential)
+                
+                resultado = equipo.kickoff()
 
-            st.success("¡Producción Finalizada!")
-            st.markdown(resultado.raw)
+                st.success("¡Producción Finalizada!")
+                st.markdown(resultado.raw)
+                
+            except Exception as e:
+                # Si Google rechaza la petición, mostramos el mensaje exacto aquí
+                st.error(f"Error de conexión con Google: {str(e)}")
