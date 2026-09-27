@@ -5,14 +5,9 @@ from datetime import datetime, timedelta
 st.set_page_config(page_title="INED Workspace", page_icon="🔐", layout="wide")
 
 # --- CONFIGURACIÓN DE NOTION ---
-# 1. Pega aquí tu Internal Integration Secret (empieza con secret_)
-NOTION_TOKEN = "secret_PEGA_TU_TOKEN_AQUI"
-
-# 2. Pega aquí el ID de la base de datos de PLANTILLAS (32 caracteres)
-DB_PLANTILLAS_ID = "PEGA_AQUI_EL_ID_DE_PLANTILLAS"
-
-# 3. Pega aquí el ID de la base de datos del CHECKLIST (32 caracteres)
-DB_CHECKLIST_ID = "PEGA_AQUI_EL_ID_DEL_CHECKLIST"
+NOTION_TOKEN = st.secrets["NOTION_TOKEN"]
+DB_PLANTILLAS_ID = st.secrets["DB_PLANTILLAS_ID"]
+DB_CHECKLIST_ID = st.secrets["DB_CHECKLIST_ID"]
 
 HEADERS = {
     "Authorization": f"Bearer {NOTION_TOKEN}",
