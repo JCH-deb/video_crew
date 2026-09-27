@@ -1,71 +1,84 @@
 import streamlit as st
-import os
-from crewai import Agent, Task, Crew, Process, LLM
+from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Generador de Videos", page_icon="🎬", layout="wide")
+st.set_page_config(page_title="INED Workspace", page_icon="⚙️", layout="wide")
 
-st.title("🎬 Generador de Videos con IA")
-st.write("Define tu concepto y deja que el equipo de agentes redacte la guía de producción.")
+st.title("⚙️ INED Workspace & Automation")
+st.write("Panel central para gestión de módulos, mensajería y documentación.")
 
-st.sidebar.header("Configuración")
-api_key = st.sidebar.text_input("Ingresa tu Gemini API Key:", type="password")
+# Crear las pestañas
+tab1, tab2, tab3 = st.tabs(["💬 Mensajería e Inyector", "📅 Calendario de Módulos", "📋 Checklist de Documentos"])
 
-col1, col2 = st.columns(2)
-with col1:
-    cancion = st.text_input("Canción:", "Boulevard of Broken Dreams")
-    tempo = st.text_input("Tempo y Energía:", "Lento y melancólico, guitarra acústica")
-with col2:
-    estilo = st.text_input("Estilo Visual:", "Neon Noir, alto contraste, sombras oscuras")
-    letra = st.text_area("Letra clave:", "I walk a lonely road, the only one that I have ever known")
+# --- PESTAÑA 1: MENSAJERÍA ---
+with tab1:
+    st.header("Inyector de Plantillas")
+    st.write("Llena los datos del módulo actual. Las etiquetas en tu texto (ej. [FECHA_INICIO]) se reemplazarán solas.")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        curso = st.text_input("Nombre del Curso:", "Ej: Intensivo B1")
+        f_inicio = st.text_input("Fecha de Inicio:", "Lunes 15 de Octubre")
+        f_fin = st.text_input("Fecha de Fin:", "Viernes 9 de Noviembre")
+    with col2:
+        f_examen = st.text_input("Fecha de Exámenes:", "Jueves 8 de Noviembre")
+        link_clases = st.text_input("Enlace de clases:", "https://drive...")
+        link_examen = st.text_input("Enlace del examen:", "https://forms...")
+        
+    st.divider()
+    
+    plantilla = st.text_area(
+        "Pega aquí tu documento o mensaje base:", 
+        height=200,
+        value="*Bienvenido al curso [CURSO]* 🚀\nIniciamos el [FECHA_INICIO] y terminamos el [FECHA_FIN].\n\nEl examen será el [FECHA_EXAMEN].\nEnlace a clases: [LINK_CLASES]\nEnlace a examen: [LINK_EXAMEN]"
+    )
+    
+    if st.button("Procesar Mensajes"):
+        resultado = plantilla.replace("[CURSO]", curso)
+        resultado = resultado.replace("[FECHA_INICIO]", f_inicio)
+        resultado = resultado.replace("[FECHA_FIN]", f_fin)
+        resultado = resultado.replace("[FECHA_EXAMEN]", f_examen)
+        resultado = resultado.replace("[LINK_CLASES]", link_clases)
+        resultado = resultado.replace("[LINK_EXAMEN]", link_examen)
+        
+        st.success("¡Texto procesado! Listo para copiar y pegar.")
+        st.text_area("Resultado final (puedes hacer retoques manuales):", value=resultado, height=200)
 
-if st.button("Generar Guion de Producción"):
-    if not api_key:
-        st.error("Por favor, ingresa tu API Key en el menú lateral izquierdo.")
-    else:
-        with st.spinner("El equipo está trabajando. Esto tomará 1 o 2 minutos..."):
-            try:
-                # 1. Limpiamos espacios accidentales
-                key_limpia = api_key.strip()
-                
-                # 2. Forzamos TODAS las variables que las sub-librerías podrían buscar
-                os.environ["GEMINI_API_KEY"] = key_limpia
-                os.environ["GOOGLE_API_KEY"] = key_limpia
-                
-                mi_llm = LLM(
-                    model="gemini/gemini-3.5-flash",
-                    api_key=key_limpia
-                )
+# --- PESTAÑA 2: CALENDARIO ---
+with tab2:
+    st.header("Calculadora de Periodos Académicos")
+    st.write("Los módulos duran exactamente 4 semanas (lunes a viernes).")
+    
+    # Input para la fecha del último módulo
+    fecha_referencia = st.date_input("Selecciona el LUNES de inicio del último módulo conocido:")
+    
+    if st.button("Calcular periodos anteriores"):
+        st.write("### Proyección hacia atrás:")
+        # Bucle para calcular los 5 módulos anteriores restando 28 días
+        for i in range(1, 6):
+            inicio_mod = fecha_referencia - timedelta(days=28 * i)
+            fin_mod = inicio_mod + timedelta(days=25) # Suma 25 días para caer en el viernes de la 4ta semana
+            
+            st.info(f"**Módulo -{i}:** Inició el Lunes {inicio_mod.strftime('%d/%m/%Y')} y finalizó el Viernes {fin_mod.strftime('%d/%m/%Y')}")
 
-                director = Agent(
-                    role="Director de Escena",
-                    goal="Diseñar la narrativa visual, cámara y luz.",
-                    backstory="Cineasta experto en trasladar emociones a movimientos de cámara.",
-                    llm=mi_llm
-                )
-                tipografo = Agent(
-                    role="Diseñador de Tipografía",
-                    goal="Integrar la letra de la canción en el entorno.",
-                    backstory="Diseñador gráfico. Integras letras en luces, reflejos o humo.",
-                    llm=mi_llm
-                )
-                colorista = Agent(
-                    role="Colorista",
-                    goal="Establecer paleta de colores y contraste.",
-                    backstory="Especialista en etalonaje que traduce moods a colores precisos.",
-                    llm=mi_llm
-                )
-
-                t_escenas = Task(description=f"Diseña la escena de apertura para '{cancion}' ({tempo}) estilo '{estilo}'.", expected_output="Descripción de escena y cámara.", agent=director)
-                t_letras = Task(description=f"Integra esta letra orgánicamente en la escena: '{letra}'.", expected_output="Propuesta tipográfica.", agent=tipografo)
-                t_color = Task(description=f"Define la teoría de color para la escena con estética '{estilo}'.", expected_output="Guía de etalonaje.", agent=colorista)
-
-                equipo = Crew(agents=[director, tipografo, colorista], tasks=[t_escenas, t_letras, t_color], process=Process.sequential)
-                
-                resultado = equipo.kickoff()
-
-                st.success("¡Producción Finalizada!")
-                st.markdown(resultado.raw)
-                
-            except Exception as e:
-                # Si Google rechaza la petición, mostramos el mensaje exacto aquí
-                st.error(f"Error de conexión con Google: {str(e)}")
+# --- PESTAÑA 3: CHECKLIST Y NOTION ---
+with tab3:
+    st.header("Flujo de Documentación")
+    st.write("Estados mapeados para sincronización futura con Notion.")
+    
+    estados = ["Iniciado", "En proceso", "En revisión", "2da revisión", "Terminado"]
+    documentos = [
+        "Statements", "Certificates", "Id1", "Id2", 
+        "Carta de Ubicación", "Carta de Aprobación", 
+        "Actas", "Data Base", "Notas", "Best Student (1)"
+    ]
+    
+    # Generar selectores dinámicos para cada documento
+    for doc in documentos:
+        col_doc, col_estado = st.columns([3, 2])
+        with col_doc:
+            st.markdown(f"**{doc}**")
+        with col_estado:
+            st.selectbox("Estado", estados, key=doc, label_visibility="collapsed")
+            
+    st.divider()
+    st.button("💾 Sincronizar con Notion (Próximamente)", disabled=True)
