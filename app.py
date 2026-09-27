@@ -1,6 +1,5 @@
 import streamlit as st
-import os
-from crewai import Agent, Task, Crew, Process
+from crewai import Agent, Task, Crew, Process, LLM
 
 st.set_page_config(page_title="Generador de Videos", page_icon="🎬", layout="wide")
 
@@ -24,30 +23,30 @@ if st.button("Generar Guion de Producción"):
     else:
         with st.spinner("El equipo está trabajando. Esto tomará 1 o 2 minutos..."):
             
-            # 1. Le damos la clave directamente al sistema operativo virtual
-            os.environ["GEMINI_API_KEY"] = api_key
-            
-            # 2. Usamos el formato de texto simple que exige CrewAI
-            modelo_gemini = "gemini/gemini-1.5-flash"
+            # Pasamos la clave EXPLÍCITAMENTE al objeto LLM
+            mi_llm = LLM(
+                model="gemini/gemini-1.5-flash",
+                api_key=api_key
+            )
 
             # Agentes
             director = Agent(
                 role="Director de Escena",
                 goal="Diseñar la narrativa visual, cámara y luz.",
                 backstory="Cineasta experto en trasladar emociones a movimientos de cámara.",
-                llm=modelo_gemini
+                llm=mi_llm
             )
             tipografo = Agent(
                 role="Diseñador de Tipografía",
                 goal="Integrar la letra de la canción en el entorno.",
                 backstory="Diseñador gráfico. Integras letras en luces, reflejos o humo.",
-                llm=modelo_gemini
+                llm=mi_llm
             )
             colorista = Agent(
                 role="Colorista",
                 goal="Establecer paleta de colores y contraste.",
                 backstory="Especialista en etalonaje que traduce moods a colores precisos.",
-                llm=modelo_gemini
+                llm=mi_llm
             )
 
             # Tareas
