@@ -21,22 +21,22 @@ HEADERS = {
 }
 
 # --- FUNCIONES DE NOTION ---
-def cargar_plantillas_notion():
-    url = f"https://api.notion.com/v1/databases/{DB_PLANTILLAS_ID}/query"
-    response = requests.post(url, headers=HEADERS)
-    plantillas = {}
-    if response.status_code == 200:
-        resultados = response.json().get("results", [])
-        for page in resultados:
-            props = page["properties"]
-            # Extraer Nombre y Contenido (ajusta los nombres si en Notion se llaman distinto)
-            try:
-                nombre = props["Nombre"]["title"][0]["text"]["content"]
-                contenido = props["Contenido"]["rich_text"][0]["text"]["content"]
-                plantillas[nombre] = contenido
-            except (KeyError, IndexError):
-                continue
-    return plantillas
+def guardar_plantilla_notion(nombre, contenido):
+    url = "https://api.notion.com/v1/pages"
+    data = {
+        "parent": {"database_id": DB_PLANTILLAS_ID},
+        "properties": {
+            "Nombre": {"title": [{"text": {"content": nombre}}]},
+            "Contenido": {"rich_text": [{"text": {"content": contenido}}]}
+        }
+    }
+    response = requests.post(url, headers=HEADERS, json=data)
+    
+    if response.status_code != 200:
+        # Esto imprimirá el error real en Streamlit
+        st.error(f"Detalle del error de Notion: {response.text}") 
+        
+    return response.status_code == 200
 
 def guardar_plantilla_notion(nombre, contenido):
     url = "https://api.notion.com/v1/pages"
