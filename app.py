@@ -165,12 +165,39 @@ with tab1:
 # --- PESTAÑA 2: CALENDARIO ---
 with tab2:
     st.header("Calculadora de Periodos Académicos")
-    fecha_referencia = st.date_input("Selecciona el LUNES de inicio del último módulo conocido:")
-    if st.button("Calcular periodos anteriores"):
+    st.write("Genera el historial cronológico de los 5 niveles. Ingresa la fecha de inicio del último curso (Nivel 5).")
+    
+    col_c1, col_c2 = st.columns(2)
+    with col_c1:
+        # La fecha de inicio del periodo final
+        fecha_inicio_ultimo = st.date_input("Fecha de Inicio (Último periodo):", value=datetime(2026, 10, 5).date())
+    with col_c2:
+        # Calcula el final automáticamente (suma 25 días para caer en viernes)
+        fecha_fin_calculada = fecha_inicio_ultimo + timedelta(days=25)
+        st.date_input("Fecha de Finalización (Calculada):", value=fecha_fin_calculada, disabled=True)
+        
+    if st.button("Generar Tabla de Periodos"):
+        periodos = []
+        
+        # El periodo ingresado es el nivel 5. Calculamos el nivel 1 restando 4 bloques de 28 días.
+        inicio_nivel_1 = fecha_inicio_ultimo - timedelta(days=28 * 4)
+        
         for i in range(1, 6):
-            inicio_mod = fecha_referencia - timedelta(days=28 * i)
+            inicio_mod = inicio_nivel_1 + timedelta(days=28 * (i - 1))
             fin_mod = inicio_mod + timedelta(days=25)
-            st.info(f"**Módulo -{i}:** Inició el Lunes {inicio_mod.strftime('%d/%m/%Y')} y finalizó el Viernes {fin_mod.strftime('%d/%m/%Y')}")
+            
+            # Formatear la fecha (Ej: June 15, 2026). El replace quita el cero a la izquierda de los días (05 -> 5)
+            inicio_str = inicio_mod.strftime("%B %d, %Y").replace(" 0", " ")
+            fin_str = fin_mod.strftime("%B %d, %Y").replace(" 0", " ")
+            
+            periodos.append({
+                "Periodo": f"{i}.",
+                "Fecha de Inicio": inicio_str,
+                "Fecha de Finalización": fin_str
+            })
+            
+        # Streamlit renderiza automáticamente las listas de diccionarios como tablas estáticas
+        st.table(periodos)
 
 # --- PESTAÑA 3: CHECKLIST Y NOTION ---
 with tab3:
