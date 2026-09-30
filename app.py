@@ -2,12 +2,11 @@ import streamlit as st
 import requests
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="INED Workspace", page_icon="🔐", layout="wide")
-
-# --- CONFIGURACIÓN DE NOTION ---
+# --- 1. CONFIGURACIÓN Y SECRETOS ---
+# Recuerda que en st.secrets debes tener NOTION_TOKEN, DB_PLANTILLAS_ID y DB_CLASES_ID
 NOTION_TOKEN = st.secrets["NOTION_TOKEN"]
 DB_PLANTILLAS_ID = st.secrets["DB_PLANTILLAS_ID"]
-DB_CHECKLIST_ID = st.secrets["DB_CHECKLIST_ID"]
+DB_CLASES_ID = st.secrets["DB_CLASES_ID"]
 
 HEADERS = {
     "Authorization": f"Bearer {NOTION_TOKEN}",
@@ -15,7 +14,8 @@ HEADERS = {
     "Notion-Version": "2022-06-28"
 }
 
-# --- FUNCIONES DE NOTION ---
+# --- 2. FUNCIONES DE CONEXIÓN CON NOTION ---
+
 def cargar_plantillas_notion():
     url = f"https://api.notion.com/v1/databases/{DB_PLANTILLAS_ID}/query"
     response = requests.post(url, headers=HEADERS)
@@ -26,7 +26,6 @@ def cargar_plantillas_notion():
             props = page["properties"]
             try:
                 nombre = props["Nombre"]["title"][0]["text"]["content"]
-                # Unimos todos los fragmentos por si el texto era mayor a 2000 caracteres
                 fragmentos_texto = props["Contenido"]["rich_text"]
                 contenido = "".join([frag["text"]["content"] for frag in fragmentos_texto])
                 plantillas[nombre] = contenido
@@ -36,8 +35,6 @@ def cargar_plantillas_notion():
 
 def guardar_plantilla_notion(nombre, contenido):
     url = "https://api.notion.com/v1/pages"
-    
-    # Truco para evadir el límite de 2000 caracteres de Notion
     fragmentos = [contenido[i:i+2000] for i in range(0, len(contenido), 2000)]
     arreglo_rich_text = [{"text": {"content": frag}} for frag in fragmentos]
     
@@ -49,167 +46,143 @@ def guardar_plantilla_notion(nombre, contenido):
         }
     }
     response = requests.post(url, headers=HEADERS, json=data)
-    
     if response.status_code != 200:
-        st.error(f"Detalle del error de Notion: {response.text}") 
-        
+        st.error(f"Error al guardar plantilla en Notion: {response.text}")
     return response.status_code == 200
 
-# --- 1. SISTEMA DE AUTENTICACIÓN ---
-if 'autenticado' not in st.session_state:
-    st.session_state['autenticado'] = False
+def calcular_periodos(fecha_inicio):
+    # Calculamos 28 días (4 semanas exactas) por cada módulo
+    modulos = {}
+    fecha_actual = fecha_inicio
+    for i in range(1, 6):
+        fecha_fin = fecha_actual + timedelta(days=28)
+        modulos[f"Módulo {i}"] = f"Del {fecha_actual.strftime('%d/%m/%Y')} al {fecha_fin.strftime('%d/%m/%Y')}"
+        fecha_actual = fecha_fin + timedelta(days=1)
+    return modulos
 
-if not st.session_state['autenticado']:
-    st.title("🔐 Acceso Restringido - INED")
-    pwd = st.text_input("Contraseña:", type="password")
-    if st.button("Entrar"):
-        if pwd == "ined2026":  
-            st.session_state['autenticado'] = True
-            st.rerun()
-        else:
-            st.error("Credencial incorrecta.")
-    st.stop()
+def crear_clase_en_notion(nombre_clase, fecha_inicio, mensajes_procesados):
+    url = "https://api.notion.com/v1/pages"
+    periodos = calcular_periodos(fecha_inicio)
+    
+    data = {
+        "parent": {"database_id": DB_CLASES_ID},
+        "properties": {
+            "Nombre": {"title": [{"text": {"content": nombre_clase}}]},
+            "Módulo 1": {"rich_text": [{"text": {"content": periodos["Módulo 1"]}}]},
+            "Módulo 2": {"rich_text": [{"text": {"content": periodos["Módulo 2"]}}]},
+            "Módulo 3": {"rich_text": [{"text": {"content": periodos["Módulo 3"]}}]},
+            "Módulo 4": {"rich_text": [{"text": {"content": periodos["Módulo 4"]}}]},
+            "Módulo 5": {"rich_text": [{"text": {"content": periodos["Módulo 5"]}}]},
+        },
+        "children": []
+    }
+    
+    # Inyectar los mensajes generados en el interior de la página
+    for titulo, contenido in mensajes_procesados.items():
+        data["children"].append({
+            "object": "block",
+            "type": "heading_3",
+            "heading_3": {"rich_text": [{"text": {"content": f"Mensaje: {titulo}"}}]}
+        })
+        fragmentos = [contenido[i:i+2000] for i in range(0, len(contenido), 2000)]
+        for frag in fragmentos:
+            data["children"].append({
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {"rich_text": [{"text": {"content": frag}}]}
+            })
+            
+    response = requests.post(url, headers=HEADERS, json=data)
+    if response.status_code != 200:
+        st.error(f"Error al crear la clase maestra: {response.text}")
+    return response.status_code == 200
 
-# --- 2. CARGA DE BASE DE DATOS EN MEMORIA ---
-if 'plantillas' not in st.session_state:
-    plantillas_notion = cargar_plantillas_notion()
-    if plantillas_notion:
-        st.session_state['plantillas'] = plantillas_notion
-    else:
-        st.session_state['plantillas'] = {
-            "Plantilla de Ejemplo": "Conecta Notion para ver tus plantillas. [CLASE]"
-        }
+# --- 3. INTERFAZ VISUAL DE STREAMLIT ---
 
-# --- 3. INTERFAZ PRINCIPAL ---
-st.title("⚙️ INED Workspace & Automation")
-if st.sidebar.button("Cerrar Sesión"):
-    st.session_state['autenticado'] = False
-    st.rerun()
+st.set_page_config(page_title="Gestor INED", layout="wide")
+st.title("🎓 Sistema de Gestión Administrativa")
 
-tab1, tab2, tab3 = st.tabs(["💬 Mensajería Editable", "📅 Calendario de Módulos", "📋 Checklist de Documentos"])
+# Creamos 3 pestañas para organizar el trabajo
+tab1, tab2, tab3 = st.tabs(["🚀 Crear Nueva Clase", "📚 Gestor de Plantillas", "📋 Mi Panel de Clases"])
 
-# --- PESTAÑA 1: MENSAJERÍA ---
 with tab1:
-    st.header("Librería de Plantillas y Generador")
-    st.subheader("1. Variables Generales")
-    col_g1, col_g2, col_g3 = st.columns(3)
-    with col_g1:
-        clase_id = st.text_input("ID de la Clase:", "CLASS 245 - 5to nivel")
-    with col_g2:
-        docente = st.text_input("Nombre del Docente:", "Jordy Chafuel")
-    with col_g3:
-        horario = st.text_input("Horario:", "7-9 p.m.")
-
-    reemplazos = {"[CLASE]": clase_id, "[DOCENTE]": docente, "[HORARIO]": horario}
-    st.divider()
-
-    flujo = st.radio("Selecciona el proceso:", ["Test de Ubicación", "Curso Intensivo"], horizontal=True)
-
-    if flujo == "Test de Ubicación":
-        col1, col2 = st.columns(2)
-        with col1:
-            fecha_test = st.text_input("Fecha del Test:", "Sábado 01 de agosto, 2026")
-            horario_test = st.text_input("Horario del Test:", "09:00 a.m. a 11:00 a.m.")
-            fecha_speaking = st.text_input("Fecha Límite Speaking:", "Viernes 31 de julio 2026, 09:00 a.m.")
-        with col2:
-            link_clases = st.text_input("Enlace Clases Grabadas:", "https://drive.google.com/...")
-            link_test = st.text_input("Enlace del Test:", "https://forms.gle/...")
-            clave_test = st.text_input("Clave del Test:", "EXTES2026@T45")
-            
-        reemplazos.update({
-            "[FECHA_TEST]": fecha_test, "[HORARIO_TEST]": horario_test, "[FECHA_SPEAKING]": fecha_speaking,
-            "[LINK_CLASES]": link_clases, "[LINK_TEST]": link_test, "[CLAVE_TEST]": clave_test
-        })
-    else:
-        col1, col2 = st.columns(2)
-        with col1:
-            fecha_inicio = st.text_input("Fecha Inicio:", "03 de agosto")
-            fecha_fin = st.text_input("Fecha Fin:", "28 de agosto")
-            fecha_escrito = st.text_input("Fecha Examen Escrito:", "JUEVES 27 DE AGOSTO, 2026 - DE 7-9 PM")
-            fecha_speaking_int = st.text_input("Límite Speaking:", "MIÉRCOLES 26 DE AGOSTO 2026 - 3PM")
-            fecha_resultados = st.text_input("Fecha Resultados:", "SÁBADO 29 DE AGOSTO, 2026")
-        with col2:
-            link_clases_int = st.text_input("Enlace Clases Grabadas (Intensivo):", "https://drive.google.com/...")
-            link_listening = st.text_input("Link Listening:", "https://forms.gle/...")
-            link_reading = st.text_input("Link Reading:", "https://forms.gle/...")
-            link_writing = st.text_input("Link Writing:", "https://forms.gle/...")
-            clave_general = st.text_input("Clave General Exámenes:", "TEX2026@45AG")
-            
-        reemplazos.update({
-            "[FECHA_INICIO]": fecha_inicio, "[FECHA_FIN]": fecha_fin, "[FECHA_ESCRITO]": fecha_escrito,
-            "[FECHA_SPEAKING]": fecha_speaking_int, "[FECHA_RESULTADOS]": fecha_resultados,
-            "[LINK_CLASES]": link_clases_int, "[LINK_LISTENING]": link_listening,
-            "[LINK_READING]": link_reading, "[LINK_WRITING]": link_writing, "[CLAVE_GENERAL]": clave_general
-        })
-
-    st.divider()
-
-    st.subheader("2. Editor y Gestor de Plantillas")
-    nombres_plantillas = list(st.session_state['plantillas'].keys())
-    if nombres_plantillas:
-        seleccion = st.selectbox("Selecciona la plantilla a utilizar:", nombres_plantillas)
-        texto_a_editar = st.text_area("Editor de Plantilla:", value=st.session_state['plantillas'][seleccion], height=300)
+    st.header("1. Datos Generales de la Clase")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        nombre_clase = st.text_input("Nombre de la Clase (Ej: CLASS 247)")
+        docente = st.text_input("Nombre del Docente")
+        horario = st.text_input("Horario de la Clase")
+        link_clases = st.text_input("Enlace de las Clases (Zoom/Meet)")
         
-        col_proc, col_act = st.columns(2)
-        with col_proc:
-            if st.button("🚀 Procesar Mensaje", type="primary"):
-                resultado = texto_a_editar
-                for etiqueta, valor in reemplazos.items():
-                    resultado = resultado.replace(etiqueta, valor)
-                st.success("¡Texto listo para enviar!")
-                st.text_area("Copia este texto para WhatsApp:", value=resultado, height=300)
-                
-        with col_act:
-            if st.button("💾 Guardar cambios en Notion"):
-                if guardar_plantilla_notion(seleccion, texto_a_editar):
-                    st.session_state['plantillas'][seleccion] = texto_a_editar
-                    st.success(f"Plantilla '{seleccion}' actualizada en Notion.")
-    else:
-        st.warning("No hay plantillas. Crea una abajo o revisa tu conexión a Notion.")
+    with col2:
+        fecha_inicio = st.date_input("Fecha de Inicio (Arranque del Módulo 1)")
+        fecha_test = st.date_input("Fecha del Test de Ubicación")
+        horario_test = st.text_input("Horario del Test")
+        link_test = st.text_input("Enlace del Test (Google Forms)")
+        clave_test = st.text_input("Clave del Test")
+        fecha_speaking = st.date_input("Fecha Límite para Speaking")
 
     st.divider()
-    with st.expander("➕ Crear Nueva Plantilla"):
-        nuevo_nombre = st.text_input("Nombre de la nueva plantilla:")
-        nuevo_texto = st.text_area("Escribe el texto base con etiquetas:", height=200)
+    st.header("2. Seleccionar Mensajes a Generar")
+    plantillas_disponibles = cargar_plantillas_notion()
+    
+    if not plantillas_disponibles:
+        st.warning("No hay plantillas guardadas. Ve a la pestaña 'Gestor de Plantillas' para crear la primera.")
+    else:
+        # El usuario puede elegir varias plantillas a la vez
+        plantillas_seleccionadas = st.multiselect(
+            "Elige los mensajes que deseas preparar y guardar para esta clase:", 
+            list(plantillas_disponibles.keys())
+        )
         
-        if st.button("Guardar en Notion y Librería"):
-            if nuevo_nombre and nuevo_texto:
-                if guardar_plantilla_notion(nuevo_nombre, nuevo_texto):
-                    st.session_state['plantillas'][nuevo_nombre] = nuevo_texto
-                    st.success("Plantilla guardada permanentemente.")
-                    st.rerun()
+        # Botón mágico para armar todo el paquete
+        if st.button("✨ Procesar y Crear Clase Maestra en Notion", type="primary"):
+            if not nombre_clase:
+                st.error("⚠️ El nombre de la clase es obligatorio.")
+            elif not plantillas_seleccionadas:
+                st.error("⚠️ Selecciona al menos un mensaje para generar.")
+            else:
+                with st.spinner("Calculando periodos académicos y empaquetando clase..."):
+                    mensajes_finales = {}
+                    
+                    for nombre_plantilla in plantillas_seleccionadas:
+                        texto_base = plantillas_disponibles[nombre_plantilla]
+                        
+                        # Reemplazo de variables automáticas
+                        texto_procesado = texto_base.replace("[CLASE]", nombre_clase)
+                        texto_procesado = texto_procesado.replace("[DOCENTE]", docente)
+                        texto_procesado = texto_procesado.replace("[HORARIO]", horario)
+                        texto_procesado = texto_procesado.replace("[LINK_CLASES]", link_clases)
+                        texto_procesado = texto_procesado.replace("[FECHA_TEST]", fecha_test.strftime('%d/%m/%Y'))
+                        texto_procesado = texto_procesado.replace("[HORARIO_TEST]", horario_test)
+                        texto_procesado = texto_procesado.replace("[LINK_TEST]", link_test)
+                        texto_procesado = texto_procesado.replace("[CLAVE_TEST]", clave_test)
+                        texto_procesado = texto_procesado.replace("[FECHA_SPEAKING]", fecha_speaking.strftime('%d/%m/%Y'))
+                        
+                        mensajes_finales[nombre_plantilla] = texto_procesado
+                    
+                    # Ejecutar la creación en la Base de Datos Maestra
+                    exito = crear_clase_en_notion(nombre_clase, fecha_inicio, mensajes_finales)
+                    
+                    if exito:
+                        st.success(f"¡Victoria! La {nombre_clase} ha sido creada en Notion con sus módulos calculados y mensajes almacenados.")
+                        st.balloons()
 
-# --- PESTAÑA 2: CALENDARIO ---
 with tab2:
-    st.header("Calculadora de Periodos Académicos")
-    col_c1, col_c2 = st.columns(2)
-    with col_c1:
-        fecha_inicio_ultimo = st.date_input("Fecha de Inicio (Último periodo):", value=datetime(2026, 10, 5).date())
-    with col_c2:
-        fecha_fin_calculada = fecha_inicio_ultimo + timedelta(days=25)
-        st.date_input("Fecha de Finalización (Calculada):", value=fecha_fin_calculada, disabled=True)
-        
-    if st.button("Generar Tabla de Periodos"):
-        periodos = []
-        inicio_nivel_1 = fecha_inicio_ultimo - timedelta(days=28 * 4)
-        for i in range(1, 6):
-            inicio_mod = inicio_nivel_1 + timedelta(days=28 * (i - 1))
-            fin_mod = inicio_mod + timedelta(days=25)
-            
-            inicio_str = inicio_mod.strftime("%B %d, %Y").replace(" 0", " ")
-            fin_str = fin_mod.strftime("%B %d, %Y").replace(" 0", " ")
-            periodos.append({"Periodo": f"{i}.", "Fecha de Inicio": inicio_str, "Fecha de Finalización": fin_str})
-        st.table(periodos)
+    st.header("Administrar Biblioteca de Plantillas")
+    st.markdown("Agrega nuevos modelos de mensajes usando las etiquetas oficiales (ej: `[CLASE]`, `[DOCENTE]`).")
+    
+    nueva_plantilla_nombre = st.text_input("Título descriptivo del mensaje:")
+    nueva_plantilla_texto = st.text_area("Cuerpo del mensaje de WhatsApp:", height=250)
+    
+    if st.button("💾 Guardar Plantilla en Notion"):
+        if nueva_plantilla_nombre and nueva_plantilla_texto:
+            if guardar_plantilla_notion(nueva_plantilla_nombre, nueva_plantilla_texto):
+                st.success(f"Plantilla '{nueva_plantilla_nombre}' lista para usarse.")
+        else:
+            st.warning("Completa ambos campos antes de guardar.")
 
-# --- PESTAÑA 3: CHECKLIST Y NOTION ---
 with tab3:
-    st.header("Flujo de Documentación")
-    st.write("Sincronización con tablero Kanban en construcción.")
-    estados = ["Iniciado", "En proceso", "En revisión", "2da revisión", "Terminado"]
-    documentos = ["Statements", "Certificates", "Id1", "Id2", "Carta de Ubicación", "Carta de Aprobación", "Actas", "Data Base", "Notas", "Best Student (1)"]
-    for doc in documentos:
-        col_doc, col_estado = st.columns([3, 2])
-        with col_doc:
-            st.markdown(f"**{doc}**")
-        with col_estado:
-            st.selectbox("Estado", estados, key=doc, label_visibility="collapsed")
+    st.header("Lectura de Clases")
+    st.info("🚧 Área en construcción. Aquí conectaremos la visualización para leer el Checklist y los mensajes directamente desde tu base maestra.")
