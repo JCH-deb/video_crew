@@ -44,7 +44,6 @@ def cargar_plantillas_notion():
     return plantillas
 
 def guardar_o_actualizar_plantilla(nombre, contenido, categoria, page_id=None):
-    # Límite ajustado a 1800 para prevenir el error con los emojis
     fragmentos = [contenido[i:i+1800] for i in range(0, len(contenido), 1800)]
     arreglo_rich_text = [{"text": {"content": frag}} for frag in fragmentos]
     
@@ -102,7 +101,6 @@ def crear_clase_en_notion(nombre_clase, fecha_inicio, mensajes_procesados):
             "type": "heading_3",
             "heading_3": {"rich_text": [{"text": {"content": f"Mensaje: {titulo}"}}]}
         })
-        # Límite ajustado a 1800 aquí también
         fragmentos = [contenido[i:i+1800] for i in range(0, len(contenido), 1800)]
         for frag in fragmentos:
             data["children"].append({
@@ -115,6 +113,67 @@ def crear_clase_en_notion(nombre_clase, fecha_inicio, mensajes_procesados):
     if response.status_code != 200:
         st.error(f"Error al crear la clase: {response.text}")
     return response.status_code == 200
+
+def cargar_clases_notion():
+    url = f"https://api.notion.com/v1/databases/{DB_CLASES_ID}/query"
+    response = requests.post(url, headers=HEADERS)
+    clases = {}
+    if response.status_code == 200:
+        resultados = response.json().get("results", [])
+        for page in resultados:
+            props = page["properties"]
+            try:
+                nombre = props["Nombre"]["title"][0]["text"]["content"]
+                page_id = page["id"]
+                
+                modulos = {}
+                for i in range(1, 6):
+                    mod_name = f"Módulo {i}"
+                    if mod_name in props and props[mod_name]["rich_text"]:
+                        modulos[mod_name] = props[mod_name]["rich_text"][0]["text"]["content"]
+                    else:
+                        modulos[mod_name] = "Sin fecha"
+                        
+                clases[nombre] = {
+                    "id": page_id,
+                    "modulos": modulos
+                }
+            except (KeyError, IndexError):
+                continue
+    return clases
+
+def obtener_contenido_clase(page_id):
+    url = f"https://api.notion.com/v1/blocks/{page_id}/children"
+    response = requests.get(url, headers=HEADERS)
+    contenido = []
+    if response.status_code == 200:
+        blocks = response.json().get("results", [])
+        
+        texto_acumulado = ""
+        titulo_actual = ""
+        
+        for block in blocks:
+            tipo = block["type"]
+            if tipo in ["paragraph", "heading_3"]:
+                try:
+                    text_elements = block[tipo]["rich_text"]
+                    text = "".join([t["text"]["content"] for t in text_elements])
+                    
+                    if tipo == "heading_3":
+                        if titulo_actual:
+                            contenido.append({"titulo": titulo_actual, "texto": texto_acumulado.strip()})
+                        titulo_actual = text
+                        texto_acumulado = ""
+                    else:
+                        texto_acumulado += text + "\n"
+                except (KeyError, IndexError):
+                    pass
+                    
+        # Agregar el último bloque procesado
+        if titulo_actual:
+            contenido.append({"titulo": titulo_actual, "texto": texto_acumulado.strip()})
+            
+    return contenido
 
 # --- 3. INTERFAZ VISUAL DE STREAMLIT ---
 
@@ -283,5 +342,36 @@ with tab2:
             st.warning("Completa el nombre y el contenido.")
 
 with tab3:
-    st.header("Lectura de Clases")
-    st.info("🚧 Área en construcción. Aquí conectaremos la visualización del Checklist y los mensajes de tus clases creadas.")
+    st.header("📋 Lectura y Panel de Clases")
+    st.markdown("Selecciona una clase creada para ver sus módulos y copiar rápidamente los mensajes para WhatsApp.")
+    
+    clases_disponibles = cargar_clases_notion()
+    
+    if not clases_disponibles:
+        st.info("Aún no hay clases registradas en tu Base de Datos de Notion. Ve a la Pestaña 1 para crear la primera.")
+    else:
+        clase_seleccionada = st.selectbox("Selecciona una clase para revisar:", list(clases_disponibles.keys()))
+        
+        if clase_seleccionada:
+            datos_clase = clases_disponibles[clase_seleccionada]
+            
+            st.subheader("📅 Cronograma de Módulos")
+            cols = st.columns(5)
+            for i in range(1, 6):
+                mod_name = f"Módulo {i}"
+                cols[i-1].metric(label=mod_name, value="", delta=datos_clase["modulos"][mod_name], delta_color="off")
+            
+            st.divider()
+            st.subheader("💬 Mensajes Generados")
+            
+            with st.spinner("Descargando mensajes desde Notion..."):
+                contenido_clase = obtener_contenido_clase(datos_clase["id"])
+                
+                if not contenido_clase:
+                    st.warning("No se encontraron mensajes guardados dentro de esta clase.")
+                else:
+                    for bloque in contenido_clase:
+                        st.markdown(f"**{bloque['titulo']}**")
+                        # st.code es ideal porque le da al usuario un botón directo de "Copiar"
+                        st.code(bloque['texto'], language="text")
+                        st.write("") # Espaciador
