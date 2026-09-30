@@ -126,7 +126,6 @@ def cargar_clases_notion():
                 nombre = props["Nombre"]["title"][0]["text"]["content"]
                 page_id = page["id"]
                 
-                # Extraemos los módulos
                 modulos = {}
                 for i in range(1, 6):
                     mod_name = f"Módulo {i}"
@@ -135,11 +134,12 @@ def cargar_clases_notion():
                     else:
                         modulos[mod_name] = "Sin fecha"
                 
-                # Extraemos TODAS las casillas de verificación (Checklist) dinámicamente
+                # Ahora escanea columnas de tipo ESTADO (Status)
                 checklist = {}
                 for prop_name, prop_data in props.items():
-                    if prop_data["type"] == "checkbox":
-                        checklist[prop_name] = prop_data["checkbox"]
+                    if prop_data["type"] == "status":
+                        estado_actual = prop_data["status"]["name"] if prop_data["status"] else "No empezado"
+                        checklist[prop_name] = estado_actual
                         
                 clases[nombre] = {
                     "id": page_id,
@@ -152,15 +152,16 @@ def cargar_clases_notion():
 
 def actualizar_checklist_notion(page_id, nuevos_valores):
     propiedades = {}
-    for nombre_columna, valor_booleano in nuevos_valores.items():
-        propiedades[nombre_columna] = {"checkbox": valor_booleano}
+    for nombre_columna, nuevo_estado in nuevos_valores.items():
+        # Actualiza mandando el texto del estado ("Listo", "No empezado", etc)
+        propiedades[nombre_columna] = {"status": {"name": nuevo_estado}}
         
     url = f"https://api.notion.com/v1/pages/{page_id}"
     data = {"properties": propiedades}
     response = requests.patch(url, headers=HEADERS, json=data)
     
     if response.status_code != 200:
-        st.error(f"Error al actualizar checklist: {response.text}")
+        st.error(f"Error al actualizar estado: {response.text}")
     return response.status_code == 200
 
 def obtener_contenido_clase(page_id):
@@ -383,26 +384,36 @@ with tab3:
             
             st.divider()
             
-            # --- SECCIÓN: CHECKLIST DE DOCUMENTACIÓN ---
-            st.subheader("✅ Checklist de Documentación")
+            # --- SECCIÓN: CHECKLIST DE ESTADOS (STATUS) ---
+            st.subheader("✅ Estado de Documentación")
             checklist_actual = datos_clase.get("checklist", {})
             
             if not checklist_actual:
-                st.info("No se encontraron columnas de tipo 'Casilla' (Checkbox) en tu base de datos de Clases.")
+                st.info("No se encontraron columnas de tipo 'Estado' (Status) en tu base de datos de Clases.")
             else:
                 with st.form(key=f"form_checklist_{datos_clase['id']}"):
                     nuevos_valores = {}
-                    cols_chk = st.columns(3) # Dividimos en 3 columnas para que se vea ordenado
+                    cols_chk = st.columns(3)
+                    
+                    # Opciones estándar de Notion en español
+                    opciones_estado = ["No empezado", "En curso", "Listo"]
                     
                     idx = 0
-                    for nombre_item, valor_actual in checklist_actual.items():
+                    for nombre_item, estado_actual in checklist_actual.items():
                         with cols_chk[idx % 3]:
-                            nuevos_valores[nombre_item] = st.checkbox(nombre_item, value=valor_actual)
+                            # Si el estado de Notion no está en nuestra lista estándar, lo añadimos temporalmente
+                            if estado_actual not in opciones_estado:
+                                opciones_dinamicas = [estado_actual] + opciones_estado
+                            else:
+                                opciones_dinamicas = opciones_estado
+                                
+                            index_actual = opciones_dinamicas.index(estado_actual)
+                            nuevos_valores[nombre_item] = st.selectbox(nombre_item, options=opciones_dinamicas, index=index_actual)
                         idx += 1
                         
                     if st.form_submit_button("💾 Guardar Cambios en Notion"):
                         if actualizar_checklist_notion(datos_clase["id"], nuevos_valores):
-                            st.success("¡Checklist actualizado correctamente! Actualiza la pestaña para confirmar.")
+                            st.success("¡Estados actualizados correctamente! Recarga la pestaña para confirmar.")
                             
             st.divider()
             
