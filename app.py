@@ -44,7 +44,8 @@ def cargar_plantillas_notion():
     return plantillas
 
 def guardar_o_actualizar_plantilla(nombre, contenido, categoria, page_id=None):
-    fragmentos = [contenido[i:i+2000] for i in range(0, len(contenido), 2000)]
+    # Límite ajustado a 1800 para prevenir el error con los emojis
+    fragmentos = [contenido[i:i+1800] for i in range(0, len(contenido), 1800)]
     arreglo_rich_text = [{"text": {"content": frag}} for frag in fragmentos]
     
     propiedades = {
@@ -101,7 +102,8 @@ def crear_clase_en_notion(nombre_clase, fecha_inicio, mensajes_procesados):
             "type": "heading_3",
             "heading_3": {"rich_text": [{"text": {"content": f"Mensaje: {titulo}"}}]}
         })
-        fragmentos = [contenido[i:i+2000] for i in range(0, len(contenido), 2000)]
+        # Límite ajustado a 1800 aquí también
+        fragmentos = [contenido[i:i+1800] for i in range(0, len(contenido), 1800)]
         for frag in fragmentos:
             data["children"].append({
                 "object": "block",
