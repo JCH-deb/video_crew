@@ -27,11 +27,9 @@ def cargar_plantillas_notion():
                 nombre = props["Nombre"]["title"][0]["text"]["content"]
                 page_id = page["id"]
                 
-                # Cargar el texto
                 fragmentos_texto = props["Contenido"]["rich_text"]
                 contenido = "".join([frag["text"]["content"] for frag in fragmentos_texto])
                 
-                # Cargar la categoría (si existe)
                 categoria = "Sin categoría"
                 if "Categoría" in props and props["Categoría"].get("select"):
                     categoria = props["Categoría"]["select"]["name"]
@@ -140,7 +138,6 @@ with tab1:
         link_grabaciones = st.text_input("Enlace de Clases Grabadas", placeholder="Ej: https://drive.google.com/drive/folders/...")
         
     with col2:
-        # Se mantiene como fecha de calendario para calcular los módulos de Notion
         fecha_inicio = st.date_input("Fecha de Inicio (Módulo 1)")
         
         if tipo_clase == "Intensivo":
@@ -153,7 +150,6 @@ with tab1:
     
     if tipo_clase == "Placement Test":
         with col3:
-            # Fechas pasadas a texto para permitir formatos descriptivos
             fecha_test = st.text_input("Fecha del Test de Ubicación", placeholder="Ej: Sábado 01 de agosto, 2026")
             horario_test = st.text_input("Horario del Test", placeholder="Ej: 09:00 a.m. a 11:00 a.m.")
             clave_test = st.text_input("Clave del Test", placeholder="Ej: EXTES2026@T45")
@@ -167,7 +163,6 @@ with tab1:
             fecha_speaking = st.text_input("Fecha Límite Speaking", placeholder="Ej: MIÉRCOLES 26 DE AGOSTO 2026- 3PM")
             fecha_recordatorio_speaking = st.text_input("Fecha Recordatorio Speaking", placeholder="Ej: miércoles 26 de agosto a las 15:00 p.m")
             fecha_cartas_aprobacion = st.text_input("Fecha Cartas de Aprobación", placeholder="Ej: SÁBADO 29 DE AGOSTO, 2026")
-            
             fecha_fin = st.text_input("Fecha Fin de Módulo", placeholder="Ej: 28 de agosto de 2026")
             fecha_resultados = st.text_input("Fecha de Resultados", placeholder="Ej: SÁBADO 29 DE AGOSTO, 2026")
             
@@ -188,51 +183,59 @@ with tab1:
             if datos["categoria"] == tipo_clase
         ]
         
-        plantillas_seleccionadas = st.multiselect(
-            f"Mensajes de {tipo_clase} disponibles:", 
-            nombres_filtrados
-        )
-        
-        if st.button("✨ Procesar y Crear Clase en Notion", type="primary"):
-            if not nombre_clase:
-                st.error("El nombre de la clase es obligatorio.")
-            elif not plantillas_seleccionadas:
-                st.error("Selecciona al menos un mensaje.")
+        if not nombres_filtrados:
+            st.info(f"No hay plantillas con la categoría '{tipo_clase}'. Ve a la Pestaña 2 y actualiza la categoría de tus plantillas guardadas.")
+        else:
+            modo_seleccion = st.radio("Opciones de generación:", ["Seleccionar todos los mensajes automáticamente", "Elegir mensajes manualmente"])
+            
+            if modo_seleccion == "Seleccionar todos los mensajes automáticamente":
+                plantillas_seleccionadas = nombres_filtrados
+                st.success(f"Se generarán todos los {len(nombres_filtrados)} mensajes disponibles para {tipo_clase}.")
             else:
-                with st.spinner("Calculando periodos académicos y empaquetando clase..."):
-                    mensajes_finales = {}
-                    for nombre_plantilla in plantillas_seleccionadas:
-                        texto_base = plantillas_disponibles[nombre_plantilla]["contenido"]
-                        
-                        texto_proc = texto_base.replace("[CLASE]", nombre_clase)
-                        texto_proc = texto_proc.replace("[HORARIO]", horario)
-                        texto_proc = texto_proc.replace("[LINK_GRABACIONES]", link_grabaciones)
-                        
-                        if tipo_clase == "Placement Test":
-                            # Reemplazos directos (sin strftime porque ya son textos)
-                            texto_proc = texto_proc.replace("[FECHA_TEST]", fecha_test)
-                            texto_proc = texto_proc.replace("[HORARIO_TEST]", horario_test)
-                            texto_proc = texto_proc.replace("[LINK_TEST]", link_test)
-                            texto_proc = texto_proc.replace("[CLAVE_TEST]", clave_test)
-                            texto_proc = texto_proc.replace("[FECHA_SPEAKING]", fecha_speaking)
+                plantillas_seleccionadas = st.multiselect(
+                    f"Mensajes de {tipo_clase} disponibles:", 
+                    nombres_filtrados
+                )
+            
+            if st.button("✨ Procesar y Crear Clase en Notion", type="primary"):
+                if not nombre_clase:
+                    st.error("El nombre de la clase es obligatorio.")
+                elif not plantillas_seleccionadas:
+                    st.error("Selecciona al menos un mensaje.")
+                else:
+                    with st.spinner("Calculando periodos académicos y empaquetando clase..."):
+                        mensajes_finales = {}
+                        for nombre_plantilla in plantillas_seleccionadas:
+                            texto_base = plantillas_disponibles[nombre_plantilla]["contenido"]
                             
-                        elif tipo_clase == "Intensivo":
-                            texto_proc = texto_proc.replace("[DOCENTE]", docente)
-                            texto_proc = texto_proc.replace("[FECHA_FIN]", fecha_fin)
-                            texto_proc = texto_proc.replace("[FECHA_EXAMEN_ESCRITO]", fecha_examen_escrito)
-                            texto_proc = texto_proc.replace("[FECHA_SPEAKING]", fecha_speaking)
-                            texto_proc = texto_proc.replace("[FECHA_RECORDATORIO_SPEAKING]", fecha_recordatorio_speaking)
-                            texto_proc = texto_proc.replace("[FECHA_CARTAS_APROBACION]", fecha_cartas_aprobacion)
-                            texto_proc = texto_proc.replace("[FECHA_RESULTADOS]", fecha_resultados)
-                            texto_proc = texto_proc.replace("[LINK_LISTENING]", link_listening)
-                            texto_proc = texto_proc.replace("[LINK_READING]", link_reading)
-                            texto_proc = texto_proc.replace("[LINK_WRITING]", link_writing)
-                            texto_proc = texto_proc.replace("[CLAVE_EXAMENES]", clave_examenes)
+                            texto_proc = texto_base.replace("[CLASE]", nombre_clase)
+                            texto_proc = texto_proc.replace("[HORARIO]", horario)
+                            texto_proc = texto_proc.replace("[LINK_GRABACIONES]", link_grabaciones)
+                            
+                            if tipo_clase == "Placement Test":
+                                texto_proc = texto_proc.replace("[FECHA_TEST]", fecha_test)
+                                texto_proc = texto_proc.replace("[HORARIO_TEST]", horario_test)
+                                texto_proc = texto_proc.replace("[LINK_TEST]", link_test)
+                                texto_proc = texto_proc.replace("[CLAVE_TEST]", clave_test)
+                                texto_proc = texto_proc.replace("[FECHA_SPEAKING]", fecha_speaking)
+                                
+                            elif tipo_clase == "Intensivo":
+                                texto_proc = texto_proc.replace("[DOCENTE]", docente)
+                                texto_proc = texto_proc.replace("[FECHA_FIN]", fecha_fin)
+                                texto_proc = texto_proc.replace("[FECHA_EXAMEN_ESCRITO]", fecha_examen_escrito)
+                                texto_proc = texto_proc.replace("[FECHA_SPEAKING]", fecha_speaking)
+                                texto_proc = texto_proc.replace("[FECHA_RECORDATORIO_SPEAKING]", fecha_recordatorio_speaking)
+                                texto_proc = texto_proc.replace("[FECHA_CARTAS_APROBACION]", fecha_cartas_aprobacion)
+                                texto_proc = texto_proc.replace("[FECHA_RESULTADOS]", fecha_resultados)
+                                texto_proc = texto_proc.replace("[LINK_LISTENING]", link_listening)
+                                texto_proc = texto_proc.replace("[LINK_READING]", link_reading)
+                                texto_proc = texto_proc.replace("[LINK_WRITING]", link_writing)
+                                texto_proc = texto_proc.replace("[CLAVE_EXAMENES]", clave_examenes)
+                            
+                            mensajes_finales[nombre_plantilla] = texto_proc
                         
-                        mensajes_finales[nombre_plantilla] = texto_proc
-                    
-                    if crear_clase_en_notion(nombre_clase, fecha_inicio, mensajes_finales):
-                        st.success(f"¡{nombre_clase} guardada correctamente en Notion!")
+                        if crear_clase_en_notion(nombre_clase, fecha_inicio, mensajes_finales):
+                            st.success(f"¡{nombre_clase} guardada correctamente en Notion!")
 
 with tab2:
     st.header("Biblioteca de Plantillas")
