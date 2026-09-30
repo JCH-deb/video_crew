@@ -134,14 +134,11 @@ def cargar_clases_notion():
                     else:
                         modulos[mod_name] = "Sin fecha"
                 
-                # Escáner ajustado para columnas tipo Selección (Select)
                 checklist = {}
-                # Excluimos "Categoría" por si existe en esta tabla, aunque es poco probable
                 columnas_ignoradas = ["Categoría"] 
                 
                 for prop_name, prop_data in props.items():
                     if prop_data["type"] == "select" and prop_name not in columnas_ignoradas:
-                        # Si está vacío (None), lo consideramos "No empezado" por defecto
                         if prop_data["select"] is None:
                             estado_actual = "No empezado"
                         else:
@@ -160,7 +157,6 @@ def cargar_clases_notion():
 def actualizar_checklist_notion(page_id, nuevos_valores):
     propiedades = {}
     for nombre_columna, nuevo_estado in nuevos_valores.items():
-        # Formato correcto para enviar a una propiedad tipo 'Select'
         propiedades[nombre_columna] = {"select": {"name": nuevo_estado}}
         
     url = f"https://api.notion.com/v1/pages/{page_id}"
@@ -206,7 +202,37 @@ def obtener_contenido_clase(page_id):
 # --- 3. INTERFAZ VISUAL DE STREAMLIT ---
 
 st.set_page_config(page_title="Gestor INED", layout="wide")
-st.title("🎓 Sistema de Gestión Administrativa")
+
+# --- SISTEMA DE LOGIN ---
+if "autenticado" not in st.session_state:
+    st.session_state["autenticado"] = False
+
+if not st.session_state["autenticado"]:
+    st.title("🔒 Acceso Restringido")
+    st.markdown("Por favor, ingresa la credencial administrativa de INED para acceder al sistema.")
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        clave_ingresada = st.text_input("Contraseña:", type="password")
+        if st.button("Ingresar", type="primary", use_container_width=True):
+            if clave_ingresada == st.secrets["APP_PASSWORD"]:
+                st.session_state["autenticado"] = True
+                st.rerun()
+            else:
+                st.error("Contraseña incorrecta. Inténtalo de nuevo.")
+    
+    st.stop()
+
+# --- SI ESTÁ AUTENTICADO, SE MUESTRA EL RESTO DE LA APP ---
+col_titulo, col_boton = st.columns([4, 1])
+with col_titulo:
+    st.title("🎓 Sistema de Gestión Administrativa")
+with col_boton:
+    st.write("") 
+    st.write("")
+    if st.button("Cerrar Sesión", use_container_width=True):
+        st.session_state["autenticado"] = False
+        st.rerun()
 
 plantillas_disponibles = cargar_plantillas_notion()
 
