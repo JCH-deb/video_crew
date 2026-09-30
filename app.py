@@ -134,11 +134,18 @@ def cargar_clases_notion():
                     else:
                         modulos[mod_name] = "Sin fecha"
                 
-                # Ahora escanea columnas de tipo ESTADO (Status)
+                # Escáner ajustado para columnas tipo Selección (Select)
                 checklist = {}
+                # Excluimos "Categoría" por si existe en esta tabla, aunque es poco probable
+                columnas_ignoradas = ["Categoría"] 
+                
                 for prop_name, prop_data in props.items():
-                    if prop_data["type"] == "status":
-                        estado_actual = prop_data["status"]["name"] if prop_data["status"] else "No empezado"
+                    if prop_data["type"] == "select" and prop_name not in columnas_ignoradas:
+                        # Si está vacío (None), lo consideramos "No empezado" por defecto
+                        if prop_data["select"] is None:
+                            estado_actual = "No empezado"
+                        else:
+                            estado_actual = prop_data["select"]["name"]
                         checklist[prop_name] = estado_actual
                         
                 clases[nombre] = {
@@ -153,8 +160,8 @@ def cargar_clases_notion():
 def actualizar_checklist_notion(page_id, nuevos_valores):
     propiedades = {}
     for nombre_columna, nuevo_estado in nuevos_valores.items():
-        # Actualiza mandando el texto del estado ("Listo", "No empezado", etc)
-        propiedades[nombre_columna] = {"status": {"name": nuevo_estado}}
+        # Formato correcto para enviar a una propiedad tipo 'Select'
+        propiedades[nombre_columna] = {"select": {"name": nuevo_estado}}
         
     url = f"https://api.notion.com/v1/pages/{page_id}"
     data = {"properties": propiedades}
@@ -384,24 +391,22 @@ with tab3:
             
             st.divider()
             
-            # --- SECCIÓN: CHECKLIST DE ESTADOS (STATUS) ---
+            # --- SECCIÓN: CHECKLIST DE SELECCIÓN (SELECT) ---
             st.subheader("✅ Estado de Documentación")
             checklist_actual = datos_clase.get("checklist", {})
             
             if not checklist_actual:
-                st.info("No se encontraron columnas de tipo 'Estado' (Status) en tu base de datos de Clases.")
+                st.info("No se encontraron columnas de tipo 'Selección' (Select) en tu base de datos de Clases.")
             else:
                 with st.form(key=f"form_checklist_{datos_clase['id']}"):
                     nuevos_valores = {}
                     cols_chk = st.columns(3)
                     
-                    # Opciones estándar de Notion en español
-                    opciones_estado = ["No empezado", "En curso", "Listo"]
+                    opciones_estado = ["No empezado", "En proceso", "Listo"]
                     
                     idx = 0
                     for nombre_item, estado_actual in checklist_actual.items():
                         with cols_chk[idx % 3]:
-                            # Si el estado de Notion no está en nuestra lista estándar, lo añadimos temporalmente
                             if estado_actual not in opciones_estado:
                                 opciones_dinamicas = [estado_actual] + opciones_estado
                             else:
