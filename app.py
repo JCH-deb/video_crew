@@ -126,6 +126,7 @@ def cargar_clases_notion():
                 nombre = props["Nombre"]["title"][0]["text"]["content"]
                 page_id = page["id"]
                 
+                # Extraemos los módulos
                 modulos = {}
                 for i in range(1, 6):
                     mod_name = f"Módulo {i}"
@@ -133,14 +134,34 @@ def cargar_clases_notion():
                         modulos[mod_name] = props[mod_name]["rich_text"][0]["text"]["content"]
                     else:
                         modulos[mod_name] = "Sin fecha"
+                
+                # Extraemos TODAS las casillas de verificación (Checklist) dinámicamente
+                checklist = {}
+                for prop_name, prop_data in props.items():
+                    if prop_data["type"] == "checkbox":
+                        checklist[prop_name] = prop_data["checkbox"]
                         
                 clases[nombre] = {
                     "id": page_id,
-                    "modulos": modulos
+                    "modulos": modulos,
+                    "checklist": checklist
                 }
             except (KeyError, IndexError):
                 continue
     return clases
+
+def actualizar_checklist_notion(page_id, nuevos_valores):
+    propiedades = {}
+    for nombre_columna, valor_booleano in nuevos_valores.items():
+        propiedades[nombre_columna] = {"checkbox": valor_booleano}
+        
+    url = f"https://api.notion.com/v1/pages/{page_id}"
+    data = {"properties": propiedades}
+    response = requests.patch(url, headers=HEADERS, json=data)
+    
+    if response.status_code != 200:
+        st.error(f"Error al actualizar checklist: {response.text}")
+    return response.status_code == 200
 
 def obtener_contenido_clase(page_id):
     url = f"https://api.notion.com/v1/blocks/{page_id}/children"
@@ -169,7 +190,6 @@ def obtener_contenido_clase(page_id):
                 except (KeyError, IndexError):
                     pass
                     
-        # Agregar el último bloque procesado
         if titulo_actual:
             contenido.append({"titulo": titulo_actual, "texto": texto_acumulado.strip()})
             
@@ -343,12 +363,12 @@ with tab2:
 
 with tab3:
     st.header("📋 Lectura y Panel de Clases")
-    st.markdown("Selecciona una clase creada para ver sus módulos y copiar rápidamente los mensajes para WhatsApp.")
+    st.markdown("Selecciona una clase creada para ver sus módulos, actualizar su documentación y copiar sus mensajes.")
     
     clases_disponibles = cargar_clases_notion()
     
     if not clases_disponibles:
-        st.info("Aún no hay clases registradas en tu Base de Datos de Notion. Ve a la Pestaña 1 para crear la primera.")
+        st.info("Aún no hay clases registradas en tu Base de Datos. Ve a la Pestaña 1 para crear la primera.")
     else:
         clase_seleccionada = st.selectbox("Selecciona una clase para revisar:", list(clases_disponibles.keys()))
         
@@ -362,6 +382,31 @@ with tab3:
                 cols[i-1].metric(label=mod_name, value="", delta=datos_clase["modulos"][mod_name], delta_color="off")
             
             st.divider()
+            
+            # --- SECCIÓN: CHECKLIST DE DOCUMENTACIÓN ---
+            st.subheader("✅ Checklist de Documentación")
+            checklist_actual = datos_clase.get("checklist", {})
+            
+            if not checklist_actual:
+                st.info("No se encontraron columnas de tipo 'Casilla' (Checkbox) en tu base de datos de Clases.")
+            else:
+                with st.form(key=f"form_checklist_{datos_clase['id']}"):
+                    nuevos_valores = {}
+                    cols_chk = st.columns(3) # Dividimos en 3 columnas para que se vea ordenado
+                    
+                    idx = 0
+                    for nombre_item, valor_actual in checklist_actual.items():
+                        with cols_chk[idx % 3]:
+                            nuevos_valores[nombre_item] = st.checkbox(nombre_item, value=valor_actual)
+                        idx += 1
+                        
+                    if st.form_submit_button("💾 Guardar Cambios en Notion"):
+                        if actualizar_checklist_notion(datos_clase["id"], nuevos_valores):
+                            st.success("¡Checklist actualizado correctamente! Actualiza la pestaña para confirmar.")
+                            
+            st.divider()
+            
+            # --- SECCIÓN: MENSAJES ---
             st.subheader("💬 Mensajes Generados")
             
             with st.spinner("Descargando mensajes desde Notion..."):
@@ -372,6 +417,5 @@ with tab3:
                 else:
                     for bloque in contenido_clase:
                         st.markdown(f"**{bloque['titulo']}**")
-                        # st.code es ideal porque le da al usuario un botón directo de "Copiar"
                         st.code(bloque['texto'], language="text")
-                        st.write("") # Espaciador
+                        st.write("")
