@@ -27,9 +27,11 @@ def cargar_plantillas_notion():
                 nombre = props["Nombre"]["title"][0]["text"]["content"]
                 page_id = page["id"]
                 
+                # Cargar el texto
                 fragmentos_texto = props["Contenido"]["rich_text"]
                 contenido = "".join([frag["text"]["content"] for frag in fragmentos_texto])
                 
+                # Cargar la categoría (si existe)
                 categoria = "Sin categoría"
                 if "Categoría" in props and props["Categoría"].get("select"):
                     categoria = props["Categoría"]["select"]["name"]
@@ -133,15 +135,16 @@ with tab1:
     col1, col2 = st.columns(2)
     
     with col1:
-        nombre_clase = st.text_input("Nombre de la Clase", placeholder="Ej: CLASS 247")
-        horario = st.text_input("Horario de la Clase", placeholder="Ej: 19:00 a 21:00")
-        link_grabaciones = st.text_input("Enlace de Clases Grabadas", placeholder="Ej: https://drive.google.com/...")
+        nombre_clase = st.text_input("Nombre de la Clase", placeholder="Ej: Clase #245 - 5to nivel")
+        horario = st.text_input("Horario de la Clase", placeholder="Ej: 7-9 p.m.")
+        link_grabaciones = st.text_input("Enlace de Clases Grabadas", placeholder="Ej: https://drive.google.com/drive/folders/...")
         
     with col2:
+        # Se mantiene como fecha de calendario para calcular los módulos de Notion
         fecha_inicio = st.date_input("Fecha de Inicio (Módulo 1)")
-        # El Docente solo se pide en Intensivo
+        
         if tipo_clase == "Intensivo":
-            docente = st.text_input("Nombre del Docente", placeholder="Ej: Teacher Jordy Chafuel")
+            docente = st.text_input("Nombre del Docente", placeholder="Ej: Jordy Chafuel")
 
     st.divider()
     st.header(f"3. Datos Específicos para {tipo_clase}")
@@ -150,27 +153,29 @@ with tab1:
     
     if tipo_clase == "Placement Test":
         with col3:
-            fecha_test = st.date_input("Fecha del Test de Ubicación")
+            # Fechas pasadas a texto para permitir formatos descriptivos
+            fecha_test = st.text_input("Fecha del Test de Ubicación", placeholder="Ej: Sábado 01 de agosto, 2026")
             horario_test = st.text_input("Horario del Test", placeholder="Ej: 09:00 a.m. a 11:00 a.m.")
-            clave_test = st.text_input("Clave del Test", placeholder="Ej: INED2026")
+            clave_test = st.text_input("Clave del Test", placeholder="Ej: EXTES2026@T45")
         with col4:
-            link_test = st.text_input("Enlace del Test (Google Forms)", placeholder="Ej: https://forms.gle/abc123xyz")
-            fecha_speaking = st.text_input("Fecha Límite Speaking", placeholder="Ej: VIERNES 23 DE OCTUBRE")
+            link_test = st.text_input("Enlace del Test", placeholder="Ej: https://forms.gle/SASU5kbDcccJwEtZ6")
+            fecha_speaking = st.text_input("Fecha Límite Speaking", placeholder="Ej: MIÉRCOLES 26 DE AGOSTO 2026- 3PM")
             
     elif tipo_clase == "Intensivo":
         with col3:
-            fecha_examen_escrito = st.text_input("Fecha Examen Escrito", placeholder="Ej: JUEVES 22 DE OCTUBRE")
-            fecha_speaking = st.text_input("Fecha Límite Speaking", placeholder="Ej: VIERNES 23 DE OCTUBRE")
-            fecha_recordatorio_speaking = st.text_input("Fecha Recordatorio Speaking", placeholder="Ej: MIÉRCOLES 21 DE OCTUBRE")
-            fecha_cartas_aprobacion = st.text_input("Fecha Cartas de Aprobación", placeholder="Ej: LUNES 26 DE OCTUBRE")
-            fecha_resultados = st.date_input("Fecha de Resultados")
-            fecha_fin = st.date_input("Fecha Fin de Módulo")
+            fecha_examen_escrito = st.text_input("Fecha Examen Escrito", placeholder="Ej: JUEVES 27 DE AGOSTO, 2026 - DE 7-9 PM")
+            fecha_speaking = st.text_input("Fecha Límite Speaking", placeholder="Ej: MIÉRCOLES 26 DE AGOSTO 2026- 3PM")
+            fecha_recordatorio_speaking = st.text_input("Fecha Recordatorio Speaking", placeholder="Ej: miércoles 26 de agosto a las 15:00 p.m")
+            fecha_cartas_aprobacion = st.text_input("Fecha Cartas de Aprobación", placeholder="Ej: SÁBADO 29 DE AGOSTO, 2026")
+            
+            fecha_fin = st.text_input("Fecha Fin de Módulo", placeholder="Ej: 28 de agosto de 2026")
+            fecha_resultados = st.text_input("Fecha de Resultados", placeholder="Ej: SÁBADO 29 DE AGOSTO, 2026")
             
         with col4:
-            clave_examenes = st.text_input("Clave de los Exámenes", placeholder="Ej: INED-B2")
-            link_listening = st.text_input("Enlace Listening", placeholder="Ej: https://forms.gle/...")
-            link_reading = st.text_input("Enlace Reading", placeholder="Ej: https://forms.gle/...")
-            link_writing = st.text_input("Enlace Writing", placeholder="Ej: https://forms.gle/...")
+            clave_examenes = st.text_input("Clave de los Exámenes", placeholder="Ej: TEX2026@45AG")
+            link_listening = st.text_input("Enlace Listening", placeholder="Ej: https://forms.gle/roJLHkFabytkiGeaA")
+            link_reading = st.text_input("Enlace Reading", placeholder="Ej: https://forms.gle/gBpatS6KdBXFxLuG9")
+            link_writing = st.text_input("Enlace Writing", placeholder="Ej: https://forms.gle/mevqAwMfQoRQ1CDj9")
 
     st.divider()
     st.header("4. Generar y Enviar a Notion")
@@ -199,28 +204,26 @@ with tab1:
                     for nombre_plantilla in plantillas_seleccionadas:
                         texto_base = plantillas_disponibles[nombre_plantilla]["contenido"]
                         
-                        # Reemplazo de variables GENERALES (Ambos casos)
                         texto_proc = texto_base.replace("[CLASE]", nombre_clase)
                         texto_proc = texto_proc.replace("[HORARIO]", horario)
                         texto_proc = texto_proc.replace("[LINK_GRABACIONES]", link_grabaciones)
                         
-                        # Reemplazo para PLACEMENT TEST
                         if tipo_clase == "Placement Test":
-                            texto_proc = texto_proc.replace("[FECHA_TEST]", fecha_test.strftime('%d/%m/%Y'))
+                            # Reemplazos directos (sin strftime porque ya son textos)
+                            texto_proc = texto_proc.replace("[FECHA_TEST]", fecha_test)
                             texto_proc = texto_proc.replace("[HORARIO_TEST]", horario_test)
                             texto_proc = texto_proc.replace("[LINK_TEST]", link_test)
                             texto_proc = texto_proc.replace("[CLAVE_TEST]", clave_test)
                             texto_proc = texto_proc.replace("[FECHA_SPEAKING]", fecha_speaking)
                             
-                        # Reemplazo para INTENSIVO
                         elif tipo_clase == "Intensivo":
                             texto_proc = texto_proc.replace("[DOCENTE]", docente)
-                            texto_proc = texto_proc.replace("[FECHA_FIN]", fecha_fin.strftime('%d/%m/%Y'))
+                            texto_proc = texto_proc.replace("[FECHA_FIN]", fecha_fin)
                             texto_proc = texto_proc.replace("[FECHA_EXAMEN_ESCRITO]", fecha_examen_escrito)
                             texto_proc = texto_proc.replace("[FECHA_SPEAKING]", fecha_speaking)
                             texto_proc = texto_proc.replace("[FECHA_RECORDATORIO_SPEAKING]", fecha_recordatorio_speaking)
                             texto_proc = texto_proc.replace("[FECHA_CARTAS_APROBACION]", fecha_cartas_aprobacion)
-                            texto_proc = texto_proc.replace("[FECHA_RESULTADOS]", fecha_resultados.strftime('%d/%m/%Y'))
+                            texto_proc = texto_proc.replace("[FECHA_RESULTADOS]", fecha_resultados)
                             texto_proc = texto_proc.replace("[LINK_LISTENING]", link_listening)
                             texto_proc = texto_proc.replace("[LINK_READING]", link_reading)
                             texto_proc = texto_proc.replace("[LINK_WRITING]", link_writing)
@@ -229,8 +232,7 @@ with tab1:
                         mensajes_finales[nombre_plantilla] = texto_proc
                     
                     if crear_clase_en_notion(nombre_clase, fecha_inicio, mensajes_finales):
-                        st.success(f"¡{nombre_clase} creada exitosamente en Notion con todos sus módulos calculados!")
-                        st.balloons()
+                        st.success(f"¡{nombre_clase} guardada correctamente en Notion!")
 
 with tab2:
     st.header("Biblioteca de Plantillas")
