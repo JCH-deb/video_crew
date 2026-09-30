@@ -46,7 +46,6 @@ def cargar_plantillas_notion():
     return plantillas
 
 def guardar_o_actualizar_plantilla(nombre, contenido, categoria, page_id=None):
-    # Fragmentamos el texto para evadir el límite de 2000 caracteres de Notion
     fragmentos = [contenido[i:i+2000] for i in range(0, len(contenido), 2000)]
     arreglo_rich_text = [{"text": {"content": frag}} for frag in fragmentos]
     
@@ -106,7 +105,6 @@ def crear_clase_en_notion(nombre_clase, fecha_inicio, mensajes_procesados):
             "type": "heading_3",
             "heading_3": {"rich_text": [{"text": {"content": f"Mensaje: {titulo}"}}]}
         })
-        # Fragmentamos el texto final por si supera el límite de caracteres
         fragmentos = [contenido[i:i+2000] for i in range(0, len(contenido), 2000)]
         for frag in fragmentos:
             data["children"].append({
@@ -130,30 +128,39 @@ plantillas_disponibles = cargar_plantillas_notion()
 tab1, tab2, tab3 = st.tabs(["🚀 Crear Nueva Clase", "📚 Gestor de Plantillas", "📋 Mi Panel de Clases"])
 
 with tab1:
-    st.header("1. Datos Generales de la Clase")
+    st.header("1. Tipo de Proceso")
+    # Este selector controla qué campos adicionales se muestran
+    tipo_clase = st.radio("¿Qué tipo de mensajes vas a preparar?", ["Placement Test", "Intensivo"], horizontal=True)
+    
+    st.divider()
+    st.header("2. Llenar Datos")
+    
     col1, col2 = st.columns(2)
     
     with col1:
-        nombre_clase = st.text_input("Nombre de la Clase (Ej: CLASS 247)")
-        docente = st.text_input("Nombre del Docente")
-        horario = st.text_input("Horario de la Clase")
+        # Los placeholders guían visualmente a cualquier usuario del sistema
+        nombre_clase = st.text_input("Nombre de la Clase", placeholder="Ej: CLASS 247")
+        docente = st.text_input("Nombre del Docente", placeholder="Ej: Teacher Jordy Chafuel")
+        horario = st.text_input("Horario de la Clase", placeholder="Ej: 19:00 a 21:00")
         
     with col2:
         fecha_inicio = st.date_input("Fecha de Inicio (Módulo 1)")
-        fecha_test = st.date_input("Fecha del Test de Ubicación")
-        horario_test = st.text_input("Horario del Test")
-        link_test = st.text_input("Enlace del Test (Google Forms)")
-        clave_test = st.text_input("Clave del Test")
-        fecha_speaking = st.date_input("Fecha Límite Speaking")
+        
+        # Lógica dinámica: Los campos del test SOLO aparecen si se elige 'Placement Test'
+        if tipo_clase == "Placement Test":
+            fecha_test = st.date_input("Fecha del Test de Ubicación")
+            horario_test = st.text_input("Horario del Test", placeholder="Ej: 09:00 a.m. a 11:00 a.m.")
+            link_test = st.text_input("Enlace del Test (Google Forms)", placeholder="Ej: https://forms.gle/abc123xyz")
+            clave_test = st.text_input("Clave del Test", placeholder="Ej: INED2026")
+            fecha_speaking = st.date_input("Fecha Límite Speaking")
 
     st.divider()
-    st.header("2. Seleccionar Mensajes a Generar")
+    st.header("3. Generar y Enviar a Notion")
     
     if not plantillas_disponibles:
         st.warning("No hay plantillas. Crea una en el 'Gestor de Plantillas'.")
     else:
-        tipo_clase = st.radio("¿Qué tipo de mensajes necesitas?", ["Placement Test", "Intensivo"])
-        
+        # Filtramos automáticamente las plantillas según el tipo de proceso elegido arriba
         nombres_filtrados = [
             nombre for nombre, datos in plantillas_disponibles.items() 
             if datos["categoria"] == tipo_clase
@@ -175,15 +182,18 @@ with tab1:
                     for nombre_plantilla in plantillas_seleccionadas:
                         texto_base = plantillas_disponibles[nombre_plantilla]["contenido"]
                         
-                        # Reemplazo de variables exactas
+                        # Reemplazo de variables generales (Siempre presentes)
                         texto_proc = texto_base.replace("[CLASE]", nombre_clase)
                         texto_proc = texto_proc.replace("[DOCENTE]", docente)
                         texto_proc = texto_proc.replace("[HORARIO]", horario)
-                        texto_proc = texto_proc.replace("[FECHA_TEST]", fecha_test.strftime('%d/%m/%Y'))
-                        texto_proc = texto_proc.replace("[HORARIO_TEST]", horario_test)
-                        texto_proc = texto_proc.replace("[LINK_TEST]", link_test)
-                        texto_proc = texto_proc.replace("[CLAVE_TEST]", clave_test)
-                        texto_proc = texto_proc.replace("[FECHA_SPEAKING]", fecha_speaking.strftime('%d/%m/%Y'))
+                        
+                        # Reemplazo de variables específicas (Solo si es Placement Test)
+                        if tipo_clase == "Placement Test":
+                            texto_proc = texto_proc.replace("[FECHA_TEST]", fecha_test.strftime('%d/%m/%Y'))
+                            texto_proc = texto_proc.replace("[HORARIO_TEST]", horario_test)
+                            texto_proc = texto_proc.replace("[LINK_TEST]", link_test)
+                            texto_proc = texto_proc.replace("[CLAVE_TEST]", clave_test)
+                            texto_proc = texto_proc.replace("[FECHA_SPEAKING]", fecha_speaking.strftime('%d/%m/%Y'))
                         
                         mensajes_finales[nombre_plantilla] = texto_proc
                     
@@ -194,7 +204,6 @@ with tab1:
 with tab2:
     st.header("Biblioteca de Plantillas")
     
-    # Métricas de plantillas
     total = len(plantillas_disponibles)
     total_test = sum(1 for p in plantillas_disponibles.values() if p["categoria"] == "Placement Test")
     total_intensivo = sum(1 for p in plantillas_disponibles.values() if p["categoria"] == "Intensivo")
@@ -206,7 +215,6 @@ with tab2:
     
     st.divider()
     
-    # Selector de acción: Crear o Editar
     opciones_edicion = ["➕ Crear nueva plantilla"] + list(plantillas_disponibles.keys())
     seleccion = st.selectbox("Selecciona una plantilla para editar o crea una nueva:", opciones_edicion)
     
@@ -223,7 +231,6 @@ with tab2:
         categoria_actual = plantillas_disponibles[seleccion]["categoria"]
         id_actual = plantillas_disponibles[seleccion]["id"]
 
-    # Formulario de edición
     nuevo_nombre = st.text_input("Nombre de la plantilla:", value=nombre_actual)
     lista_categorias = ["Placement Test", "Intensivo", "Sin categoría"]
     indice_categoria = lista_categorias.index(categoria_actual) if categoria_actual in lista_categorias else 0
