@@ -46,6 +46,7 @@ def cargar_plantillas_notion():
     return plantillas
 
 def guardar_o_actualizar_plantilla(nombre, contenido, categoria, page_id=None):
+    # Fragmentamos el texto para evadir el límite de 2000 caracteres de Notion
     fragmentos = [contenido[i:i+2000] for i in range(0, len(contenido), 2000)]
     arreglo_rich_text = [{"text": {"content": frag}} for frag in fragmentos]
     
@@ -105,6 +106,7 @@ def crear_clase_en_notion(nombre_clase, fecha_inicio, mensajes_procesados):
             "type": "heading_3",
             "heading_3": {"rich_text": [{"text": {"content": f"Mensaje: {titulo}"}}]}
         })
+        # Fragmentamos el texto final por si supera el límite de caracteres
         fragmentos = [contenido[i:i+2000] for i in range(0, len(contenido), 2000)]
         for frag in fragmentos:
             data["children"].append({
@@ -114,6 +116,8 @@ def crear_clase_en_notion(nombre_clase, fecha_inicio, mensajes_procesados):
             })
             
     response = requests.post(url, headers=HEADERS, json=data)
+    if response.status_code != 200:
+        st.error(f"Error al crear la clase: {response.text}")
     return response.status_code == 200
 
 # --- 3. INTERFAZ VISUAL DE STREAMLIT ---
@@ -133,7 +137,6 @@ with tab1:
         nombre_clase = st.text_input("Nombre de la Clase (Ej: CLASS 247)")
         docente = st.text_input("Nombre del Docente")
         horario = st.text_input("Horario de la Clase")
-        link_clases = st.text_input("Enlace de las Clases (Zoom/Meet)")
         
     with col2:
         fecha_inicio = st.date_input("Fecha de Inicio (Módulo 1)")
@@ -149,7 +152,6 @@ with tab1:
     if not plantillas_disponibles:
         st.warning("No hay plantillas. Crea una en el 'Gestor de Plantillas'.")
     else:
-        # Filtramos por categoría para mostrarlas ordenadas
         tipo_clase = st.radio("¿Qué tipo de mensajes necesitas?", ["Placement Test", "Intensivo"])
         
         nombres_filtrados = [
@@ -168,16 +170,15 @@ with tab1:
             elif not plantillas_seleccionadas:
                 st.error("Selecciona al menos un mensaje.")
             else:
-                with st.spinner("Procesando..."):
+                with st.spinner("Calculando periodos académicos y empaquetando clase..."):
                     mensajes_finales = {}
                     for nombre_plantilla in plantillas_seleccionadas:
-                        # Extraemos el contenido base del diccionario
                         texto_base = plantillas_disponibles[nombre_plantilla]["contenido"]
                         
+                        # Reemplazo de variables exactas
                         texto_proc = texto_base.replace("[CLASE]", nombre_clase)
                         texto_proc = texto_proc.replace("[DOCENTE]", docente)
                         texto_proc = texto_proc.replace("[HORARIO]", horario)
-                        texto_proc = texto_proc.replace("[LINK_CLASES]", link_clases)
                         texto_proc = texto_proc.replace("[FECHA_TEST]", fecha_test.strftime('%d/%m/%Y'))
                         texto_proc = texto_proc.replace("[HORARIO_TEST]", horario_test)
                         texto_proc = texto_proc.replace("[LINK_TEST]", link_test)
@@ -187,7 +188,7 @@ with tab1:
                         mensajes_finales[nombre_plantilla] = texto_proc
                     
                     if crear_clase_en_notion(nombre_clase, fecha_inicio, mensajes_finales):
-                        st.success(f"¡{nombre_clase} creada exitosamente en Notion!")
+                        st.success(f"¡{nombre_clase} creada exitosamente en Notion con todos sus módulos calculados!")
                         st.balloons()
 
 with tab2:
@@ -224,16 +225,18 @@ with tab2:
 
     # Formulario de edición
     nuevo_nombre = st.text_input("Nombre de la plantilla:", value=nombre_actual)
-    nueva_categoria = st.selectbox("Categoría:", ["Placement Test", "Intensivo", "Sin categoría"], index=["Placement Test", "Intensivo", "Sin categoría"].index(categoria_actual) if categoria_actual in ["Placement Test", "Intensivo", "Sin categoría"] else 0)
+    lista_categorias = ["Placement Test", "Intensivo", "Sin categoría"]
+    indice_categoria = lista_categorias.index(categoria_actual) if categoria_actual in lista_categorias else 0
+    nueva_categoria = st.selectbox("Categoría:", lista_categorias, index=indice_categoria)
     nuevo_texto = st.text_area("Cuerpo del mensaje:", value=texto_actual, height=300)
     
     if st.button("💾 Guardar / Actualizar Plantilla"):
         if nuevo_nombre and nuevo_texto:
             if guardar_o_actualizar_plantilla(nuevo_nombre, nuevo_texto, nueva_categoria, id_actual):
-                st.success("Cambios guardados correctamente en Notion. Recarga la página para ver los cambios actualizados.")
+                st.success("Cambios guardados correctamente. Recarga la página para ver la actualización.")
         else:
             st.warning("Completa el nombre y el contenido.")
 
 with tab3:
     st.header("Lectura de Clases")
-    st.info("🚧 Área en construcción. Aquí conectaremos la lectura de las clases existentes.")
+    st.info("🚧 Área en construcción. Aquí conectaremos la visualización del Checklist y los mensajes de tus clases creadas.")
