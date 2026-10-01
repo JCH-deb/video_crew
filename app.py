@@ -8,7 +8,7 @@ import time
 NOTION_TOKEN = st.secrets["NOTION_TOKEN"]
 DB_PLANTILLAS_ID = st.secrets["DB_PLANTILLAS_ID"]
 DB_CLASES_ID = st.secrets["DB_CLASES_ID"]
-DB_ESTUDIANTES_ID = st.secrets["DB_ESTUDIANTES_ID"] # NUEVO SECRETO
+DB_ESTUDIANTES_ID = st.secrets["DB_ESTUDIANTES_ID"] 
 
 HEADERS = {
     "Authorization": f"Bearer {NOTION_TOKEN}",
@@ -165,7 +165,6 @@ def agregar_estudiante_notion(nombre, id_alumno, id_clase):
             "Clase Asignada": {"relation": [{"id": id_clase}]}
         }
     }
-    # Solo agrega el ID si no está vacío
     if id_alumno and str(id_alumno).strip() != "":
         data["properties"]["ID's"] = {"rich_text": [{"text": {"content": str(id_alumno)}}]}
         
@@ -223,7 +222,6 @@ def actualizar_notas_notion(page_id, propiedades_actualizar):
                 propiedades[key] = {"select": {"name": str(value)}}
         else:
             try:
-                # Convertir a flotante por si hay decimales, si está vacío poner 0
                 num_val = float(value) if value != "" and value is not None else 0
                 propiedades[key] = {"number": num_val}
             except ValueError:
@@ -273,46 +271,57 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📝 Libro de Calificaciones"
 ])
 
-# --- PESTAÑAS 1, 2 y 3 (Se mantienen exactamente igual, resumidas por espacio visual) ---
+# --- PESTAÑA 1: CREAR CLASE ---
 with tab1:
     st.header("1. Tipo de Proceso")
     tipo_clase = st.radio("¿Qué tipo de mensajes vas a preparar?", ["Placement Test", "Intensivo"], horizontal=True)
+    
     st.divider()
     st.header("2. Llenar Datos Generales")
+    
     col1, col2 = st.columns(2)
     with col1:
-        nombre_clase = st.text_input("Nombre de la Clase", placeholder="Ej: Clase #245")
-        horario = st.text_input("Horario de la Clase")
-        link_grabaciones = st.text_input("Enlace de Clases Grabadas")
+        nombre_clase = st.text_input("Nombre de la Clase", placeholder="Ej: Clase #245 - 5to nivel")
+        horario = st.text_input("Horario de la Clase", placeholder="Ej: 7-9 p.m.")
+        link_grabaciones = st.text_input("Enlace de Clases Grabadas", placeholder="Ej: https://drive.google.com/drive/folders/...")
+        
     with col2:
         fecha_inicio = st.date_input("Fecha de Inicio (Módulo 1)")
-        docente = st.text_input("Nombre del Docente") if tipo_clase == "Intensivo" else ""
+        if tipo_clase == "Intensivo":
+            docente = st.text_input("Nombre del Docente", placeholder="Ej: Jordy Chafuel")
+
     st.divider()
     st.header(f"3. Datos Específicos para {tipo_clase}")
+    
     col3, col4 = st.columns(2)
+    
     if tipo_clase == "Placement Test":
         with col3:
-            fecha_test = st.text_input("Fecha del Test de Ubicación")
-            horario_test = st.text_input("Horario del Test")
-            clave_test = st.text_input("Clave del Test")
+            fecha_test = st.text_input("Fecha del Test de Ubicación", placeholder="Ej: Sábado 01 de agosto, 2026")
+            horario_test = st.text_input("Horario del Test", placeholder="Ej: 09:00 a.m. a 11:00 a.m.")
+            clave_test = st.text_input("Clave del Test", placeholder="Ej: EXTES2026@T45")
         with col4:
-            link_test = st.text_input("Enlace del Test")
-            fecha_speaking = st.text_input("Fecha Límite Speaking")
+            link_test = st.text_input("Enlace del Test", placeholder="Ej: https://forms.gle/SASU5kbDcccJwEtZ6")
+            fecha_speaking = st.text_input("Fecha Límite Speaking", placeholder="Ej: MIÉRCOLES 26 DE AGOSTO 2026- 3PM")
+            
     elif tipo_clase == "Intensivo":
         with col3:
-            fecha_examen_escrito = st.text_input("Fecha Examen Escrito")
-            fecha_speaking = st.text_input("Fecha Límite Speaking")
-            fecha_recordatorio_speaking = st.text_input("Fecha Recordatorio Speaking")
-            fecha_cartas_aprobacion = st.text_input("Fecha Cartas de Aprobación")
-            fecha_fin = st.text_input("Fecha Fin de Módulo")
-            fecha_resultados = st.text_input("Fecha de Resultados")
+            fecha_examen_escrito = st.text_input("Fecha Examen Escrito", placeholder="Ej: JUEVES 27 DE AGOSTO, 2026 - DE 7-9 PM")
+            fecha_speaking = st.text_input("Fecha Límite Speaking", placeholder="Ej: MIÉRCOLES 26 DE AGOSTO 2026- 3PM")
+            fecha_recordatorio_speaking = st.text_input("Fecha Recordatorio Speaking", placeholder="Ej: miércoles 26 de agosto a las 15:00 p.m")
+            fecha_cartas_aprobacion = st.text_input("Fecha Cartas de Aprobación", placeholder="Ej: SÁBADO 29 DE AGOSTO, 2026")
+            fecha_fin = st.text_input("Fecha Fin de Módulo", placeholder="Ej: 28 de agosto de 2026")
+            fecha_resultados = st.text_input("Fecha de Resultados", placeholder="Ej: SÁBADO 29 DE AGOSTO, 2026")
+            
         with col4:
-            clave_examenes = st.text_input("Clave de los Exámenes")
-            link_listening = st.text_input("Enlace Listening")
-            link_reading = st.text_input("Enlace Reading")
-            link_writing = st.text_input("Enlace Writing")
+            clave_examenes = st.text_input("Clave de los Exámenes", placeholder="Ej: TEX2026@45AG")
+            link_listening = st.text_input("Enlace Listening", placeholder="Ej: https://forms.gle/roJLHkFabytkiGeaA")
+            link_reading = st.text_input("Enlace Reading", placeholder="Ej: https://forms.gle/gBpatS6KdBXFxLuG9")
+            link_writing = st.text_input("Enlace Writing", placeholder="Ej: https://forms.gle/mevqAwMfQoRQ1CDj9")
+
     st.divider()
     st.header("4. Generar y Enviar a Notion")
+    
     if plantillas_disponibles:
         nombres_filtrados = [n for n, d in plantillas_disponibles.items() if d["categoria"] == tipo_clase]
         if nombres_filtrados:
@@ -388,7 +397,7 @@ with tab3:
                 st.markdown(f"**{bloque['titulo']}**")
                 st.code(bloque['texto'], language="text")
 
-# --- 4. NUEVA PESTAÑA: REGISTRO DE ESTUDIANTES ---
+# --- PESTAÑA 4: REGISTRO MASIVO ---
 with tab4:
     st.header("👥 Registro Masivo de Estudiantes")
     st.markdown("Selecciona una clase, pega la lista de nombres desde Excel y digita sus ID's directamente en la web.")
@@ -403,22 +412,18 @@ with tab4:
         lista_nombres = st.text_area("2. Pega aquí los nombres (un alumno por línea):", height=150, placeholder="Juan Pérez\nMaría López\nCarlos Santana...")
         
         if lista_nombres:
-            # Procesar el texto pegado eliminando líneas vacías
             nombres_limpios = [n.strip() for n in lista_nombres.split('\n') if n.strip()]
-            
-            # Crear un dataframe temporal para la vista
             df_inscripcion = pd.DataFrame({
                 "Nombre y Apellido": nombres_limpios,
                 "ID's": [""] * len(nombres_limpios)
             })
             
             st.markdown("**3. Ingresa las cédulas (Puedes moverte con las flechas del teclado):**")
-            # Mostrar la tabla editable
             df_editado = st.data_editor(
                 df_inscripcion, 
                 use_container_width=True,
                 column_config={
-                    "Nombre y Apellido": st.column_config.TextColumn(disabled=True) # Bloquea la edición del nombre
+                    "Nombre y Apellido": st.column_config.TextColumn(disabled=True) 
                 }
             )
             
@@ -431,16 +436,15 @@ with tab4:
                     exito = agregar_estudiante_notion(fila["Nombre y Apellido"], fila["ID's"], id_de_la_clase)
                     if not exito:
                         errores += 1
-                    # Actualizar barra de progreso
                     barra_progreso.progress((idx + 1) / total_alumnos)
-                    time.sleep(0.1) # Pequeña pausa para no saturar la API
+                    time.sleep(0.1) 
                 
                 if errores == 0:
                     st.success(f"¡Se han matriculado {total_alumnos} estudiantes exitosamente a {clase_destino}!")
                 else:
                     st.warning(f"Se matricularon los alumnos, pero hubo {errores} errores. Revisa tu Notion.")
 
-# --- 5. NUEVA PESTAÑA: LIBRO DE CALIFICACIONES ---
+# --- PESTAÑA 5: NOTAS ---
 with tab5:
     st.header("📝 Libro de Calificaciones")
     
@@ -463,29 +467,22 @@ with tab5:
         else:
             df_notas = pd.DataFrame(lista_estudiantes)
             
-            # Definir qué columnas mostrar según el tipo de clase
-            columnas_ocultas = {"page_id": None} # Siempre ocultamos el ID de Notion
-            
             if tipo_evaluacion == "Placement Test":
-                # Mostramos solo las del Placement
                 columnas_vista = ["Nombre y Apellido", "PT - Writing /80", "PT - Speaking /20", "Nivel de ubicación"]
             else:
-                # Mostramos solo las del Intensivo
                 columnas_vista = ["Nombre y Apellido", "INT - Reading /25", "INT - Writing /25", "INT - Listening /25", "INT - Speaking /25", "CEFR Level"]
             
-            # Reorganizar DataFrame para mostrar solo lo necesario
             df_mostrar = df_notas[["page_id"] + columnas_vista]
             
             st.markdown("---")
             st.markdown("**Digita las calificaciones a continuación:**")
             
-            # Tabla interactiva
             df_notas_editadas = st.data_editor(
                 df_mostrar,
                 use_container_width=True,
                 column_config={
-                    "page_id": None, # Lo oculta visualmente
-                    "Nombre y Apellido": st.column_config.TextColumn(disabled=True) # Evita que cambies el nombre por accidente
+                    "page_id": None, 
+                    "Nombre y Apellido": st.column_config.TextColumn(disabled=True) 
                 }
             )
             
@@ -493,16 +490,12 @@ with tab5:
                 barra_progreso_notas = st.progress(0)
                 total_estudiantes = len(df_notas_editadas)
                 
-                # Encontrar las filas que han cambiado comparando dataframes
                 for idx, fila_editada in df_notas_editadas.iterrows():
                     page_id = fila_editada["page_id"]
-                    
-                    # Preparamos el diccionario solo con los datos editables
                     datos_a_actualizar = {}
                     for col in columnas_vista:
                         if col != "Nombre y Apellido":
                             datos_a_actualizar[col] = fila_editada[col]
-                    
                     actualizar_notas_notion(page_id, datos_a_actualizar)
                     barra_progreso_notas.progress((idx + 1) / total_estudiantes)
                     
