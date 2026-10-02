@@ -215,7 +215,7 @@ def cargar_estudiantes_por_clase(id_clase):
                     "INT - Speaking /25": get_number("INT - Speaking /25"),
                     "INT - Final Average /100": get_formula_number("INT - Final Average /100"),
                     "CEFR Level": get_select("CEFR Level"),
-                    "Observaciones": get_rich_text("Observaciones") # Se agrega observaciones
+                    "Observaciones": get_rich_text("Observaciones")
                 }
                 estudiantes.append(estudiante)
             except Exception as e:
@@ -231,12 +231,10 @@ def actualizar_notas_notion(page_id, propiedades_actualizar):
             if value and str(value).strip() != "":
                 propiedades[key] = {"select": {"name": str(value)}}
         elif key == "Observaciones":
-            # Protegemos contra celdas vacías o nulas
             texto_obs = "" if pd.isna(value) or value is None else str(value)
             propiedades[key] = {"rich_text": [{"text": {"content": texto_obs}}]}
         else:
             try:
-                # Protegemos contra celdas de números vacías (NaN)
                 num_val = 0 if pd.isna(value) or value == "" or value is None else float(value)
                 propiedades[key] = {"number": num_val}
             except ValueError:
@@ -447,11 +445,13 @@ with tab4:
                 total_alumnos = len(df_editado)
                 errores = 0
                 
-                for idx, fila in df_editado.iterrows():
+                # TRUCO 1: Invertimos el orden al guardar [::-1] para que Notion apile el primero arriba
+                for idx, fila in df_editado.iloc[::-1].iterrows():
                     exito = agregar_estudiante_notion(fila["Nombre y Apellido"], fila["ID's"], id_de_la_clase)
                     if not exito:
                         errores += 1
-                    barra_progreso.progress((idx + 1) / total_alumnos)
+                    # Ajustamos el progreso basándonos en la iteración actual
+                    barra_progreso.progress(min(1.0, (total_alumnos - idx) / total_alumnos))
                     time.sleep(0.1) 
                 
                 if errores == 0:
@@ -482,7 +482,9 @@ with tab5:
         else:
             df_notas = pd.DataFrame(lista_estudiantes)
             
-            # Agregamos "Observaciones" a ambas vistas
+            # TRUCO 2: Ordenar alfabéticamente para coincidir siempre con tu Excel/Google Sheets
+            df_notas = df_notas.sort_values(by="Nombre y Apellido").reset_index(drop=True)
+            
             if tipo_evaluacion == "Placement Test":
                 columnas_vista = ["Nombre y Apellido", "PT - Writing /80", "PT - Speaking /20", "PT - Total /100", "Nivel de ubicación", "Observaciones"]
             else:
@@ -493,7 +495,6 @@ with tab5:
             st.markdown("---")
             st.markdown("**Digita las calificaciones a continuación:**")
             
-            # EL TRUCO ESTÁ AQUÍ: st.form envuelve la tabla y detiene la recarga automática
             with st.form("form_notas"):
                 df_notas_editadas = st.data_editor(
                     df_mostrar,
@@ -503,11 +504,10 @@ with tab5:
                         "Nombre y Apellido": st.column_config.TextColumn(disabled=True),
                         "PT - Total /100": st.column_config.NumberColumn(disabled=True), 
                         "INT - Final Average /100": st.column_config.NumberColumn(disabled=True),
-                        "Observaciones": st.column_config.TextColumn() # Permitimos editar texto
+                        "Observaciones": st.column_config.TextColumn() 
                     }
                 )
                 
-                # Este botón es el único que ejecutará el guardado
                 submit_notas = st.form_submit_button("💾 Sincronizar Calificaciones con Notion", type="primary")
                 
                 if submit_notas:
