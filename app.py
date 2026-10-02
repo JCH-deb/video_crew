@@ -156,13 +156,14 @@ def obtener_contenido_clase(page_id):
 
 # --- 2.1 FUNCIONES DE CONEXIÓN CON NOTION (ESTUDIANTES) ---
 
-def agregar_estudiante_notion(nombre, id_alumno, id_clase):
+def agregar_estudiante_notion(nombre, id_alumno, id_clase, orden_lista):
     url = "https://api.notion.com/v1/pages"
     data = {
         "parent": {"database_id": DB_ESTUDIANTES_ID},
         "properties": {
             "Nombre y Apellido": {"title": [{"text": {"content": nombre}}]},
-            "Clase Asignada": {"relation": [{"id": id_clase}]}
+            "Clase Asignada": {"relation": [{"id": id_clase}]},
+            "Orden": {"number": orden_lista}  # AQUÍ INYECTAMOS EL ORDEN EXACTO
         }
     }
     if id_alumno and str(id_alumno).strip() != "":
@@ -174,8 +175,7 @@ def agregar_estudiante_notion(nombre, id_alumno, id_clase):
 def cargar_estudiantes_por_clase(id_clase):
     url = f"https://api.notion.com/v1/databases/{DB_ESTUDIANTES_ID}/query"
     
-    # NUEVO: Le pedimos a Notion que nos devuelva la lista ordenada 
-    # exactamente por el momento en que los creamos (del primero al último)
+    # OBLIGAMOS A NOTION A DEVOLVERLOS EN EL ORDEN MATEMÁTICO QUE LES DIMOS
     payload = {
         "filter": {
             "property": "Clase Asignada",
@@ -183,7 +183,7 @@ def cargar_estudiantes_por_clase(id_clase):
         },
         "sorts": [
             {
-                "timestamp": "created_time",
+                "property": "Orden",
                 "direction": "ascending"
             }
         ]
@@ -455,9 +455,9 @@ with tab4:
                 total_alumnos = len(df_editado)
                 errores = 0
                 
-                # REGRESA A SU FORMA ORIGINAL: Procesamos exactamente en el orden de arriba hacia abajo
                 for idx, fila in df_editado.iterrows():
-                    exito = agregar_estudiante_notion(fila["Nombre y Apellido"], fila["ID's"], id_de_la_clase)
+                    # idx empieza en 0, así que le sumamos 1 para que el orden empiece en 1, 2, 3...
+                    exito = agregar_estudiante_notion(fila["Nombre y Apellido"], fila["ID's"], id_de_la_clase, idx + 1)
                     if not exito:
                         errores += 1
                     barra_progreso.progress((idx + 1) / total_alumnos)
@@ -490,9 +490,6 @@ with tab5:
             st.warning(f"No hay estudiantes matriculados en {clase_a_calificar}. Ve a la Pestaña 4 para inscribirlos.")
         else:
             df_notas = pd.DataFrame(lista_estudiantes)
-            
-            # ELIMINADO EL ORDENAMIENTO ALFABÉTICO (A-Z)
-            # Ahora respeta estrictamente el orden de Fecha de Creación
             
             if tipo_evaluacion == "Placement Test":
                 columnas_vista = ["Nombre y Apellido", "PT - Writing /80", "PT - Speaking /20", "PT - Total /100", "Nivel de ubicación", "Observaciones"]
