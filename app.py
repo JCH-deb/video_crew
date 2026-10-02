@@ -173,12 +173,22 @@ def agregar_estudiante_notion(nombre, id_alumno, id_clase):
 
 def cargar_estudiantes_por_clase(id_clase):
     url = f"https://api.notion.com/v1/databases/{DB_ESTUDIANTES_ID}/query"
+    
+    # NUEVO: Le pedimos a Notion que nos devuelva la lista ordenada 
+    # exactamente por el momento en que los creamos (del primero al último)
     payload = {
         "filter": {
             "property": "Clase Asignada",
             "relation": {"contains": id_clase}
-        }
+        },
+        "sorts": [
+            {
+                "timestamp": "created_time",
+                "direction": "ascending"
+            }
+        ]
     }
+    
     response = requests.post(url, headers=HEADERS, json=payload)
     estudiantes = []
     if response.status_code == 200:
@@ -445,13 +455,12 @@ with tab4:
                 total_alumnos = len(df_editado)
                 errores = 0
                 
-                # TRUCO 1: Invertimos el orden al guardar [::-1] para que Notion apile el primero arriba
-                for idx, fila in df_editado.iloc[::-1].iterrows():
+                # REGRESA A SU FORMA ORIGINAL: Procesamos exactamente en el orden de arriba hacia abajo
+                for idx, fila in df_editado.iterrows():
                     exito = agregar_estudiante_notion(fila["Nombre y Apellido"], fila["ID's"], id_de_la_clase)
                     if not exito:
                         errores += 1
-                    # Ajustamos el progreso basándonos en la iteración actual
-                    barra_progreso.progress(min(1.0, (total_alumnos - idx) / total_alumnos))
+                    barra_progreso.progress((idx + 1) / total_alumnos)
                     time.sleep(0.1) 
                 
                 if errores == 0:
@@ -459,7 +468,7 @@ with tab4:
                 else:
                     st.warning(f"Se matricularon los alumnos, pero hubo {errores} errores. Revisa tu Notion.")
 
-# --- PESTAÑA 5: NOTAS (CON FORMULARIO PARA EVITAR QUE SE BORREN) ---
+# --- PESTAÑA 5: NOTAS ---
 with tab5:
     st.header("📝 Libro de Calificaciones")
     
@@ -482,8 +491,8 @@ with tab5:
         else:
             df_notas = pd.DataFrame(lista_estudiantes)
             
-            # TRUCO 2: Ordenar alfabéticamente para coincidir siempre con tu Excel/Google Sheets
-            df_notas = df_notas.sort_values(by="Nombre y Apellido").reset_index(drop=True)
+            # ELIMINADO EL ORDENAMIENTO ALFABÉTICO (A-Z)
+            # Ahora respeta estrictamente el orden de Fecha de Creación
             
             if tipo_evaluacion == "Placement Test":
                 columnas_vista = ["Nombre y Apellido", "PT - Writing /80", "PT - Speaking /20", "PT - Total /100", "Nivel de ubicación", "Observaciones"]
