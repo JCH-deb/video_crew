@@ -191,21 +191,31 @@ def cargar_estudiantes_por_clase(id_clase):
                 def get_number(prop_name):
                     return props.get(prop_name, {}).get("number", 0) or 0
                 
+                def get_formula_number(prop_name):
+                    return props.get(prop_name, {}).get("formula", {}).get("number", 0) or 0
+                
                 def get_select(prop_name):
                     select_data = props.get(prop_name, {}).get("select")
                     return select_data["name"] if select_data else None
+                    
+                def get_rich_text(prop_name):
+                    rt = props.get(prop_name, {}).get("rich_text", [])
+                    return "".join([t["text"]["content"] for t in rt]) if rt else ""
 
                 estudiante = {
                     "page_id": page["id"],
                     "Nombre y Apellido": nombre,
                     "PT - Writing /80": get_number("PT - Writing /80"),
                     "PT - Speaking /20": get_number("PT - Speaking /20"),
+                    "PT - Total /100": get_formula_number("PT - Total /100"), 
                     "Nivel de ubicación": get_select("Nivel de ubicación"),
                     "INT - Reading /25": get_number("INT - Reading /25"),
                     "INT - Writing /25": get_number("INT - Writing /25"),
                     "INT - Listening /25": get_number("INT - Listening /25"),
                     "INT - Speaking /25": get_number("INT - Speaking /25"),
+                    "INT - Final Average /100": get_formula_number("INT - Final Average /100"),
                     "CEFR Level": get_select("CEFR Level"),
+                    "Observaciones": get_rich_text("Observaciones") # Se agrega observaciones
                 }
                 estudiantes.append(estudiante)
             except Exception as e:
@@ -220,9 +230,14 @@ def actualizar_notas_notion(page_id, propiedades_actualizar):
         if "Nivel" in key or "CEFR" in key:
             if value and str(value).strip() != "":
                 propiedades[key] = {"select": {"name": str(value)}}
+        elif key == "Observaciones":
+            # Protegemos contra celdas vacías o nulas
+            texto_obs = "" if pd.isna(value) or value is None else str(value)
+            propiedades[key] = {"rich_text": [{"text": {"content": texto_obs}}]}
         else:
             try:
-                num_val = float(value) if value != "" and value is not None else 0
+                # Protegemos contra celdas de números vacías (NaN)
+                num_val = 0 if pd.isna(value) or value == "" or value is None else float(value)
                 propiedades[key] = {"number": num_val}
             except ValueError:
                 propiedades[key] = {"number": 0}
@@ -444,7 +459,7 @@ with tab4:
                 else:
                     st.warning(f"Se matricularon los alumnos, pero hubo {errores} errores. Revisa tu Notion.")
 
-# --- PESTAÑA 5: NOTAS ---
+# --- PESTAÑA 5: NOTAS (CON FORMULARIO PARA EVITAR QUE SE BORREN) ---
 with tab5:
     st.header("📝 Libro de Calificaciones")
     
@@ -467,36 +482,51 @@ with tab5:
         else:
             df_notas = pd.DataFrame(lista_estudiantes)
             
+            # Agregamos "Observaciones" a ambas vistas
             if tipo_evaluacion == "Placement Test":
-                columnas_vista = ["Nombre y Apellido", "PT - Writing /80", "PT - Speaking /20", "Nivel de ubicación"]
+                columnas_vista = ["Nombre y Apellido", "PT - Writing /80", "PT - Speaking /20", "PT - Total /100", "Nivel de ubicación", "Observaciones"]
             else:
-                columnas_vista = ["Nombre y Apellido", "INT - Reading /25", "INT - Writing /25", "INT - Listening /25", "INT - Speaking /25", "CEFR Level"]
+                columnas_vista = ["Nombre y Apellido", "INT - Reading /25", "INT - Writing /25", "INT - Listening /25", "INT - Speaking /25", "INT - Final Average /100", "CEFR Level", "Observaciones"]
             
             df_mostrar = df_notas[["page_id"] + columnas_vista]
             
             st.markdown("---")
             st.markdown("**Digita las calificaciones a continuación:**")
             
-            df_notas_editadas = st.data_editor(
-                df_mostrar,
-                use_container_width=True,
-                column_config={
-                    "page_id": None, 
-                    "Nombre y Apellido": st.column_config.TextColumn(disabled=True) 
-                }
-            )
-            
-            if st.button("💾 Sincronizar Calificaciones con Notion", type="primary"):
-                barra_progreso_notas = st.progress(0)
-                total_estudiantes = len(df_notas_editadas)
+            # EL TRUCO ESTÁ AQUÍ: st.form envuelve la tabla y detiene la recarga automática
+            with st.form("form_notas"):
+                df_notas_editadas = st.data_editor(
+                    df_mostrar,
+                    use_container_width=True,
+                    column_config={
+                        "page_id": None, 
+                        "Nombre y Apellido": st.column_config.TextColumn(disabled=True),
+                        "PT - Total /100": st.column_config.NumberColumn(disabled=True), 
+                        "INT - Final Average /100": st.column_config.NumberColumn(disabled=True),
+                        "Observaciones": st.column_config.TextColumn() # Permitimos editar texto
+                    }
+                )
                 
-                for idx, fila_editada in df_notas_editadas.iterrows():
-                    page_id = fila_editada["page_id"]
-                    datos_a_actualizar = {}
-                    for col in columnas_vista:
-                        if col != "Nombre y Apellido":
-                            datos_a_actualizar[col] = fila_editada[col]
-                    actualizar_notas_notion(page_id, datos_a_actualizar)
-                    barra_progreso_notas.progress((idx + 1) / total_estudiantes)
+                # Este botón es el único que ejecutará el guardado
+                submit_notas = st.form_submit_button("💾 Sincronizar Calificaciones con Notion", type="primary")
+                
+                if submit_notas:
+                    barra_progreso_notas = st.progress(0)
+                    total_estudiantes = len(df_notas_editadas)
                     
-                st.success("¡Calificaciones actualizadas y sincronizadas con Notion correctamente!")
+                    columnas_formula = ["PT - Total /100", "INT - Final Average /100"]
+                    
+                    for idx, fila_editada in df_notas_editadas.iterrows():
+                        page_id = fila_editada["page_id"]
+                        datos_a_actualizar = {}
+                        
+                        for col in columnas_vista:
+                            if col != "Nombre y Apellido" and col not in columnas_formula:
+                                datos_a_actualizar[col] = fila_editada[col]
+                                
+                        actualizar_notas_notion(page_id, datos_a_actualizar)
+                        barra_progreso_notas.progress((idx + 1) / total_estudiantes)
+                        
+                    st.success("¡Calificaciones guardadas! Recargando para mostrar los nuevos totales...")
+                    time.sleep(1.5) 
+                    st.rerun()
