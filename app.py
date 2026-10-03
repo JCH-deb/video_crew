@@ -163,19 +163,24 @@ def agregar_estudiante_notion(nombre, id_alumno, id_clase, orden_lista):
         "properties": {
             "Nombre y Apellido": {"title": [{"text": {"content": nombre}}]},
             "Clase Asignada": {"relation": [{"id": id_clase}]},
-            "Orden": {"number": orden_lista}  # AQUÍ INYECTAMOS EL ORDEN EXACTO
+            "Orden": {"number": orden_lista}  
         }
     }
     if id_alumno and str(id_alumno).strip() != "":
         data["properties"]["ID's"] = {"rich_text": [{"text": {"content": str(id_alumno)}}]}
         
     response = requests.post(url, headers=HEADERS, json=data)
+    
+    # Manejo de error para detectar problemas en la estructura
+    if response.status_code != 200:
+        st.error(f"Error al guardar a {nombre}: {response.text}")
+        
     return response.status_code == 200
 
 def cargar_estudiantes_por_clase(id_clase):
     url = f"https://api.notion.com/v1/databases/{DB_ESTUDIANTES_ID}/query"
     
-    # OBLIGAMOS A NOTION A DEVOLVERLOS EN EL ORDEN MATEMÁTICO QUE LES DIMOS
+    # OBLIGAMOS A NOTION A DEVOLVERLOS EN EL ORDEN MATEMÁTICO
     payload = {
         "filter": {
             "property": "Clase Asignada",
@@ -305,11 +310,12 @@ with tab1:
     col1, col2 = st.columns(2)
     with col1:
         nombre_clase = st.text_input("Nombre de la Clase", placeholder="Ej: Clase #245 - 5to nivel")
-        horario = st.text_input("Horario de la Clase", placeholder="Ej: 7-9 p.m.")
+        horario = st.text_input("Horario de la Clase", placeholder="Ej: 7-9 p.m. (Lunes a Viernes)")
         link_grabaciones = st.text_input("Enlace de Clases Grabadas", placeholder="Ej: https://drive.google.com/drive/folders/...")
         
     with col2:
-        fecha_inicio = st.date_input("Fecha de Inicio (Módulo 1)")
+        fecha_inicio = st.date_input("Fecha de Inicio (Para Notion)")
+        fecha_inicio_texto = st.text_input("Fecha de Inicio (Para Mensajes)", placeholder="Ej: 03 de agosto, 2026")
         if tipo_clase == "Intensivo":
             docente = st.text_input("Nombre del Docente", placeholder="Ej: Jordy Chafuel")
 
@@ -341,6 +347,9 @@ with tab1:
             link_listening = st.text_input("Enlace Listening", placeholder="Ej: https://forms.gle/roJLHkFabytkiGeaA")
             link_reading = st.text_input("Enlace Reading", placeholder="Ej: https://forms.gle/gBpatS6KdBXFxLuG9")
             link_writing = st.text_input("Enlace Writing", placeholder="Ej: https://forms.gle/mevqAwMfQoRQ1CDj9")
+            fecha_pago_1 = st.text_input("Fecha de abono #1", placeholder="Ej: 05 DE AGOSTO, 2026")
+            fecha_pago_2 = st.text_input("Fecha de abono #2", placeholder="Ej: 25 DE AGOSTO, 2026")
+            fecha_confirmacion = st.text_input("Fecha límite de confirmación", placeholder="Ej: domingo 02 de agosto, 2026 11h00 am")
 
     st.divider()
     st.header("4. Generar y Enviar a Notion")
@@ -356,11 +365,16 @@ with tab1:
                         mensajes_finales = {}
                         for np in plantillas_seleccionadas:
                             texto = plantillas_disponibles[np]["contenido"]
-                            texto = texto.replace("[CLASE]", nombre_clase).replace("[HORARIO]", horario).replace("[LINK_GRABACIONES]", link_grabaciones)
+                            
+                            # REEMPLAZO DE VARIABLES GENERALES
+                            texto = texto.replace("[CLASE]", nombre_clase).replace("[HORARIO]", horario).replace("[LINK_GRABACIONES]", link_grabaciones).replace("[FECHA_INICIO]", fecha_inicio_texto)
+                            
                             if tipo_clase == "Placement Test":
                                 texto = texto.replace("[FECHA_TEST]", fecha_test).replace("[HORARIO_TEST]", horario_test).replace("[LINK_TEST]", link_test).replace("[CLAVE_TEST]", clave_test).replace("[FECHA_SPEAKING]", fecha_speaking)
                             elif tipo_clase == "Intensivo":
-                                texto = texto.replace("[DOCENTE]", docente).replace("[FECHA_FIN]", fecha_fin).replace("[FECHA_EXAMEN_ESCRITO]", fecha_examen_escrito).replace("[FECHA_SPEAKING]", fecha_speaking).replace("[FECHA_RECORDATORIO_SPEAKING]", fecha_recordatorio_speaking).replace("[FECHA_CARTAS_APROBACION]", fecha_cartas_aprobacion).replace("[FECHA_RESULTADOS]", fecha_resultados).replace("[LINK_LISTENING]", link_listening).replace("[LINK_READING]", link_reading).replace("[LINK_WRITING]", link_writing).replace("[CLAVE_EXAMENES]", clave_examenes)
+                                # REEMPLAZO DE VARIABLES DE INTENSIVO
+                                texto = texto.replace("[DOCENTE]", docente).replace("[FECHA_FIN]", fecha_fin).replace("[FECHA_EXAMEN_ESCRITO]", fecha_examen_escrito).replace("[FECHA_SPEAKING]", fecha_speaking).replace("[FECHA_RECORDATORIO_SPEAKING]", fecha_recordatorio_speaking).replace("[FECHA_CARTAS_APROBACION]", fecha_cartas_aprobacion).replace("[FECHA_RESULTADOS]", fecha_resultados).replace("[LINK_LISTENING]", link_listening).replace("[LINK_READING]", link_reading).replace("[LINK_WRITING]", link_writing).replace("[CLAVE_EXAMENES]", clave_examenes).replace("[FECHA_PAGO_1]", fecha_pago_1).replace("[FECHA_PAGO_2]", fecha_pago_2).replace("[FECHA_CONFIRMACION]", fecha_confirmacion)
+                            
                             mensajes_finales[np] = texto
                         if crear_clase_en_notion(nombre_clase, fecha_inicio, mensajes_finales):
                             st.success("¡Clase creada correctamente!")
@@ -456,7 +470,6 @@ with tab4:
                 errores = 0
                 
                 for idx, fila in df_editado.iterrows():
-                    # idx empieza en 0, así que le sumamos 1 para que el orden empiece en 1, 2, 3...
                     exito = agregar_estudiante_notion(fila["Nombre y Apellido"], fila["ID's"], id_de_la_clase, idx + 1)
                     if not exito:
                         errores += 1
