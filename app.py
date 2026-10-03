@@ -154,6 +154,56 @@ def obtener_contenido_clase(page_id):
             contenido.append({"titulo": titulo_actual, "texto": texto_acumulado.strip()})
     return contenido
 
+def agregar_o_reemplazar_mensajes_notion(page_id, mensajes_procesados):
+    # 1. Obtener todos los bloques actuales de la clase
+    url_get = f"https://api.notion.com/v1/blocks/{page_id}/children"
+    response = requests.get(url_get, headers=HEADERS)
+    if response.status_code == 200:
+        blocks = response.json().get("results", [])
+        
+        bloques_a_eliminar = []
+        eliminando = False
+        titulos_a_reemplazar = [f"Mensaje: {titulo}" for titulo in mensajes_procesados.keys()]
+        
+        for block in blocks:
+            if block["type"] == "heading_3":
+                try:
+                    texto_heading = "".join([t["text"]["content"] for t in block["heading_3"]["rich_text"]])
+                    if texto_heading in titulos_a_reemplazar:
+                        eliminando = True  # Encontramos un mensaje viejo, marcamos para borrar
+                        bloques_a_eliminar.append(block["id"])
+                    else:
+                        eliminando = False
+                except:
+                    pass
+            elif eliminando:
+                bloques_a_eliminar.append(block["id"])
+        
+        # 2. Eliminar los bloques viejos
+        for block_id in bloques_a_eliminar:
+            requests.delete(f"https://api.notion.com/v1/blocks/{block_id}", headers=HEADERS)
+            time.sleep(0.1)
+            
+    # 3. Agregar los bloques actualizados/nuevos al final
+    url_append = f"https://api.notion.com/v1/blocks/{page_id}/children"
+    children = []
+    for titulo, contenido in mensajes_procesados.items():
+        children.append({
+            "object": "block", "type": "heading_3",
+            "heading_3": {"rich_text": [{"text": {"content": f"Mensaje: {titulo}"}}]}
+        })
+        fragmentos = [contenido[i:i+1800] for i in range(0, len(contenido), 1800)]
+        for frag in fragmentos:
+            children.append({
+                "object": "block", "type": "paragraph",
+                "paragraph": {"rich_text": [{"text": {"content": frag}}]}
+            })
+    
+    if children:
+        res_append = requests.patch(url_append, headers=HEADERS, json={"children": children})
+        return res_append.status_code == 200
+    return True
+
 # --- 2.1 FUNCIONES DE CONEXIÓN CON NOTION (ESTUDIANTES) ---
 
 def agregar_estudiante_notion(nombre, id_alumno, id_clase, orden_lista):
@@ -171,7 +221,6 @@ def agregar_estudiante_notion(nombre, id_alumno, id_clase, orden_lista):
         
     response = requests.post(url, headers=HEADERS, json=data)
     
-    # Manejo de error para detectar problemas en la estructura
     if response.status_code != 200:
         st.error(f"Error al guardar a {nombre}: {response.text}")
         
@@ -180,7 +229,7 @@ def agregar_estudiante_notion(nombre, id_alumno, id_clase, orden_lista):
 def cargar_estudiantes_por_clase(id_clase):
     url = f"https://api.notion.com/v1/databases/{DB_ESTUDIANTES_ID}/query"
     
-    # OBLIGAMOS A NOTION A DEVOLVERLOS EN EL ORDEN MATEMÁTICO
+    # FORZAR ORDENAMIENTO POR LA COLUMNA 'Orden'
     payload = {
         "filter": {
             "property": "Clase Asignada",
@@ -299,7 +348,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📝 Libro de Calificaciones"
 ])
 
-# --- PESTAÑA 1: CREAR CLASE ---
+# --- PESTAÑA 1: CREAR / ACTUALIZAR CLASE ---
 with tab1:
     st.header("1. Tipo de Proceso")
     tipo_clase = st.radio("¿Qué tipo de mensajes vas a preparar?", ["Placement Test", "Intensivo"], horizontal=True)
@@ -359,28 +408,60 @@ with tab1:
         if nombres_filtrados:
             modo_seleccion = st.radio("Opciones de generación:", ["Seleccionar todos automáticamente", "Elegir manualmente"])
             plantillas_seleccionadas = nombres_filtrados if modo_seleccion == "Seleccionar todos automáticamente" else st.multiselect("Mensajes disponibles:", nombres_filtrados)
-            if st.button("✨ Procesar y Crear Clase", type="primary"):
-                if nombre_clase and plantillas_seleccionadas:
-                    with st.spinner("Procesando..."):
-                        mensajes_finales = {}
-                        for np in plantillas_seleccionadas:
-                            texto = plantillas_disponibles[np]["contenido"]
-                            
-                            # REEMPLAZO DE VARIABLES GENERALES
-                            texto = texto.replace("[CLASE]", nombre_clase).replace("[HORARIO]", horario).replace("[LINK_GRABACIONES]", link_grabaciones).replace("[FECHA_INICIO]", fecha_inicio_texto)
-                            
-                            if tipo_clase == "Placement Test":
-                                texto = texto.replace("[FECHA_TEST]", fecha_test).replace("[HORARIO_TEST]", horario_test).replace("[LINK_TEST]", link_test).replace("[CLAVE_TEST]", clave_test).replace("[FECHA_SPEAKING]", fecha_speaking)
-                            elif tipo_clase == "Intensivo":
-                                # REEMPLAZO DE VARIABLES DE INTENSIVO
-                                texto = texto.replace("[DOCENTE]", docente).replace("[FECHA_FIN]", fecha_fin).replace("[FECHA_EXAMEN_ESCRITO]", fecha_examen_escrito).replace("[FECHA_SPEAKING]", fecha_speaking).replace("[FECHA_RECORDATORIO_SPEAKING]", fecha_recordatorio_speaking).replace("[FECHA_CARTAS_APROBACION]", fecha_cartas_aprobacion).replace("[FECHA_RESULTADOS]", fecha_resultados).replace("[LINK_LISTENING]", link_listening).replace("[LINK_READING]", link_reading).replace("[LINK_WRITING]", link_writing).replace("[CLAVE_EXAMENES]", clave_examenes).replace("[FECHA_PAGO_1]", fecha_pago_1).replace("[FECHA_PAGO_2]", fecha_pago_2).replace("[FECHA_CONFIRMACION]", fecha_confirmacion)
-                            
-                            mensajes_finales[np] = texto
-                        if crear_clase_en_notion(nombre_clase, fecha_inicio, mensajes_finales):
-                            st.success("¡Clase creada correctamente!")
-                else:
-                    st.error("Faltan datos obligatorios.")
+            
+            if plantillas_seleccionadas:
+                st.markdown("---")
+                col_n1, col_n2 = st.columns(2)
+                
+                with col_n1:
+                    st.markdown("**Opción A: Clase Nueva**")
+                    st.caption("Crea una página desde cero en Notion.")
+                    btn_nueva = st.button("✨ Procesar y Crear NUEVA Clase", type="primary", use_container_width=True)
+                
+                with col_n2:
+                    st.markdown("**Opción B: Actualizar Existente**")
+                    if clases_disponibles:
+                        clase_a_actualizar = st.selectbox("Selecciona la clase a modificar:", list(clases_disponibles.keys()), label_visibility="collapsed")
+                        btn_actualizar = st.button("🔄 Reemplazar/Agregar a esta Clase", type="secondary", use_container_width=True)
+                    else:
+                        st.info("No hay clases creadas para actualizar.")
+                        btn_actualizar = False
 
+                if btn_nueva or btn_actualizar:
+                    if btn_nueva and not nombre_clase:
+                        st.error("Falta el 'Nombre de la Clase' para poder crearla.")
+                    elif btn_actualizar and not clases_disponibles:
+                        st.error("No hay clases disponibles para actualizar.")
+                    else:
+                        with st.spinner("Procesando y conectando con Notion..."):
+                            mensajes_finales = {}
+                            nombre_final_clase = nombre_clase if btn_nueva else clase_a_actualizar
+                            
+                            for np in plantillas_seleccionadas:
+                                texto = plantillas_disponibles[np]["contenido"]
+                                
+                                texto = texto.replace("[CLASE]", nombre_final_clase).replace("[HORARIO]", horario).replace("[LINK_GRABACIONES]", link_grabaciones).replace("[FECHA_INICIO]", fecha_inicio_texto)
+                                
+                                if tipo_clase == "Placement Test":
+                                    texto = texto.replace("[FECHA_TEST]", fecha_test).replace("[HORARIO_TEST]", horario_test).replace("[LINK_TEST]", link_test).replace("[CLAVE_TEST]", clave_test).replace("[FECHA_SPEAKING]", fecha_speaking)
+                                elif tipo_clase == "Intensivo":
+                                    texto = texto.replace("[DOCENTE]", docente).replace("[FECHA_FIN]", fecha_fin).replace("[FECHA_EXAMEN_ESCRITO]", fecha_examen_escrito).replace("[FECHA_SPEAKING]", fecha_speaking).replace("[FECHA_RECORDATORIO_SPEAKING]", fecha_recordatorio_speaking).replace("[FECHA_CARTAS_APROBACION]", fecha_cartas_aprobacion).replace("[FECHA_RESULTADOS]", fecha_resultados).replace("[LINK_LISTENING]", link_listening).replace("[LINK_READING]", link_reading).replace("[LINK_WRITING]", link_writing).replace("[CLAVE_EXAMENES]", clave_examenes).replace("[FECHA_PAGO_1]", fecha_pago_1).replace("[FECHA_PAGO_2]", fecha_pago_2).replace("[FECHA_CONFIRMACION]", fecha_confirmacion)
+                                
+                                mensajes_finales[np] = texto
+                            
+                            if btn_nueva:
+                                if crear_clase_en_notion(nombre_final_clase, fecha_inicio, mensajes_finales):
+                                    st.success(f"¡Clase '{nombre_final_clase}' creada correctamente!")
+                                else:
+                                    st.error("Hubo un error al crear la clase.")
+                            elif btn_actualizar:
+                                id_de_la_clase = clases_disponibles[clase_a_actualizar]["id"]
+                                if agregar_o_reemplazar_mensajes_notion(id_de_la_clase, mensajes_finales):
+                                    st.success(f"¡Textos actualizados exitosamente en '{clase_a_actualizar}'!")
+                                else:
+                                    st.error("Hubo un error al actualizar la clase en Notion.")
+
+# --- PESTAÑA 2: GESTOR PLANTILLAS ---
 with tab2:
     st.header("Biblioteca de Plantillas")
     opciones = ["➕ Crear nueva plantilla"] + list(plantillas_disponibles.keys())
@@ -404,6 +485,7 @@ with tab2:
             if guardar_o_actualizar_plantilla(nuevo_nombre, nuevo_texto, nueva_categoria, id_actual):
                 st.success("¡Guardado!")
 
+# --- PESTAÑA 3: PANEL DE CLASES ---
 with tab3:
     st.header("📋 Panel de Clases")
     if clases_disponibles:
