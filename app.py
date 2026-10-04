@@ -16,6 +16,11 @@ HEADERS = {
     "Notion-Version": "2022-06-28"
 }
 
+# --- FUNCIÓN AUXILIAR DE FECHAS ---
+def formatear_fecha_es(fecha):
+    meses = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+    return f"{fecha.day:02d} de {meses[fecha.month - 1]}, {fecha.year}"
+
 # --- 2. FUNCIONES DE CONEXIÓN CON NOTION (CLASES Y PLANTILLAS) ---
 
 def cargar_plantillas_notion():
@@ -155,7 +160,6 @@ def obtener_contenido_clase(page_id):
     return contenido
 
 def agregar_o_reemplazar_mensajes_notion(page_id, mensajes_procesados):
-    # 1. Obtener todos los bloques actuales de la clase
     url_get = f"https://api.notion.com/v1/blocks/{page_id}/children"
     response = requests.get(url_get, headers=HEADERS)
     if response.status_code == 200:
@@ -170,7 +174,7 @@ def agregar_o_reemplazar_mensajes_notion(page_id, mensajes_procesados):
                 try:
                     texto_heading = "".join([t["text"]["content"] for t in block["heading_3"]["rich_text"]])
                     if texto_heading in titulos_a_reemplazar:
-                        eliminando = True  # Encontramos un mensaje viejo, marcamos para borrar
+                        eliminando = True  
                         bloques_a_eliminar.append(block["id"])
                     else:
                         eliminando = False
@@ -179,12 +183,10 @@ def agregar_o_reemplazar_mensajes_notion(page_id, mensajes_procesados):
             elif eliminando:
                 bloques_a_eliminar.append(block["id"])
         
-        # 2. Eliminar los bloques viejos
         for block_id in bloques_a_eliminar:
             requests.delete(f"https://api.notion.com/v1/blocks/{block_id}", headers=HEADERS)
             time.sleep(0.1)
             
-    # 3. Agregar los bloques actualizados/nuevos al final
     url_append = f"https://api.notion.com/v1/blocks/{page_id}/children"
     children = []
     for titulo, contenido in mensajes_procesados.items():
@@ -229,7 +231,6 @@ def agregar_estudiante_notion(nombre, id_alumno, id_clase, orden_lista):
 def cargar_estudiantes_por_clase(id_clase):
     url = f"https://api.notion.com/v1/databases/{DB_ESTUDIANTES_ID}/query"
     
-    # FORZAR ORDENAMIENTO POR LA COLUMNA 'Orden'
     payload = {
         "filter": {
             "property": "Clase Asignada",
@@ -364,16 +365,19 @@ with tab1:
         
     with col2:
         fecha_inicio = st.date_input("Fecha de Inicio (Para Notion)")
-        fecha_inicio_texto = st.text_input("Fecha de Inicio (Para Mensajes)", placeholder="Ej: 03 de agosto, 2026")
+        
+        # Generar fecha sugerida en texto en español
+        fecha_texto_sugerida = formatear_fecha_es(fecha_inicio)
+        fecha_inicio_texto = st.text_input("Fecha de Inicio (Para Mensajes)", value=fecha_texto_sugerida)
+        
         if tipo_clase == "Intensivo":
             docente = st.text_input("Nombre del Docente", placeholder="Ej: Jordy Chafuel")
 
     st.divider()
     st.header(f"3. Datos Específicos para {tipo_clase}")
     
-    col3, col4 = st.columns(2)
-    
     if tipo_clase == "Placement Test":
+        col3, col4 = st.columns(2)
         with col3:
             fecha_test = st.text_input("Fecha del Test de Ubicación", placeholder="Ej: Sábado 01 de agosto, 2026")
             horario_test = st.text_input("Horario del Test", placeholder="Ej: 09:00 a.m. a 11:00 a.m.")
@@ -383,21 +387,46 @@ with tab1:
             fecha_speaking = st.text_input("Fecha Límite Speaking", placeholder="Ej: MIÉRCOLES 26 DE AGOSTO 2026- 3PM")
             
     elif tipo_clase == "Intensivo":
-        with col3:
+        
+        # --- SECCIÓN 1: ACADÉMICAS ---
+        st.markdown("#### 📅 1. Fechas Académicas")
+        col_ac1, col_ac2 = st.columns(2)
+        
+        with col_ac1:
+            # Cálculo automático a 4 semanas aprox (25 días para que caiga viernes)
+            fecha_fin_calculada = fecha_inicio + timedelta(days=25)
+            fecha_fin_sugerida = formatear_fecha_es(fecha_fin_calculada)
+            
+            fecha_fin = st.text_input("Fecha Fin de Módulo (Auto-calculada)", value=fecha_fin_sugerida)
+            fecha_cartas_aprobacion = st.text_input("Fecha Cartas de Aprobación", placeholder="Ej: SÁBADO 29 DE AGOSTO, 2026")
+        
+        with col_ac2:
+            fecha_resultados = st.text_input("Fecha de Resultados", placeholder="Ej: SÁBADO 29 DE AGOSTO, 2026")
+            
+        st.markdown("---")
+        
+        # --- SECCIÓN 2: EXÁMENES ---
+        st.markdown("#### 📝 2. Exámenes y Evaluaciones")
+        col_ex1, col_ex2 = st.columns(2)
+        with col_ex1:
             fecha_examen_escrito = st.text_input("Fecha Examen Escrito", placeholder="Ej: JUEVES 27 DE AGOSTO, 2026 - DE 7-9 PM")
             fecha_speaking = st.text_input("Fecha Límite Speaking", placeholder="Ej: MIÉRCOLES 26 DE AGOSTO 2026- 3PM")
             fecha_recordatorio_speaking = st.text_input("Fecha Recordatorio Speaking", placeholder="Ej: miércoles 26 de agosto a las 15:00 p.m")
-            fecha_cartas_aprobacion = st.text_input("Fecha Cartas de Aprobación", placeholder="Ej: SÁBADO 29 DE AGOSTO, 2026")
-            fecha_fin = st.text_input("Fecha Fin de Módulo", placeholder="Ej: 28 de agosto de 2026")
-            fecha_resultados = st.text_input("Fecha de Resultados", placeholder="Ej: SÁBADO 29 DE AGOSTO, 2026")
-            
-        with col4:
             clave_examenes = st.text_input("Clave de los Exámenes", placeholder="Ej: TEX2026@45AG")
-            link_listening = st.text_input("Enlace Listening", placeholder="Ej: https://forms.gle/roJLHkFabytkiGeaA")
-            link_reading = st.text_input("Enlace Reading", placeholder="Ej: https://forms.gle/gBpatS6KdBXFxLuG9")
-            link_writing = st.text_input("Enlace Writing", placeholder="Ej: https://forms.gle/mevqAwMfQoRQ1CDj9")
+        with col_ex2:
+            link_listening = st.text_input("Enlace Listening", placeholder="Ej: https://forms.gle/...")
+            link_reading = st.text_input("Enlace Reading", placeholder="Ej: https://forms.gle/...")
+            link_writing = st.text_input("Enlace Writing", placeholder="Ej: https://forms.gle/...")
+            
+        st.markdown("---")
+        
+        # --- SECCIÓN 3: PAGOS ---
+        st.markdown("#### 💰 3. Pagos y Confirmación")
+        col_pg1, col_pg2 = st.columns(2)
+        with col_pg1:
             fecha_pago_1 = st.text_input("Fecha de abono #1", placeholder="Ej: 05 DE AGOSTO, 2026")
             fecha_pago_2 = st.text_input("Fecha de abono #2", placeholder="Ej: 25 DE AGOSTO, 2026")
+        with col_pg2:
             fecha_confirmacion = st.text_input("Fecha límite de confirmación", placeholder="Ej: domingo 02 de agosto, 2026 11h00 am")
 
     st.divider()
