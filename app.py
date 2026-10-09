@@ -61,15 +61,23 @@ def guardar_o_actualizar_plantilla(nombre, contenido, categoria, page_id=None):
         response = requests.post(url, headers=HEADERS, json=data)
     return response.status_code == 200
 
-def calcular_periodos(fecha_inicio):
+def calcular_periodos(fecha_inicio_m5):
     modulos = {}
-    fecha_actual = fecha_inicio
-    for i in range(1, 6):
-        fecha_fin = fecha_actual + timedelta(days=28)
-        modulos[f"Módulo {i}"] = f"Del {fecha_actual.strftime('%d/%m/%Y')} al {fecha_fin.strftime('%d/%m/%Y')}"
-        fecha_actual = fecha_fin + timedelta(days=1)
+    
+    # La fecha ingresada en el calendario se asume como el inicio del Módulo 5
+    for i in range(5, 0, -1):
+        # M5 resta 0 días. M4 resta 28. M3 resta 56, etc.
+        dias_a_restar = (5 - i) * 28
+        fecha_inicio_modulo = fecha_inicio_m5 - timedelta(days=dias_a_restar)
+        
+        # El módulo termina un viernes (25 días después de su inicio)
+        fecha_fin_modulo = fecha_inicio_modulo + timedelta(days=25) 
+        
+        # Guardamos en formato DD/MM/YYYY
+        modulos[f"Módulo {i}"] = f"Del {fecha_inicio_modulo.strftime('%d/%m/%Y')} al {fecha_fin_modulo.strftime('%d/%m/%Y')}"
+        
     return modulos
-
+    
 def crear_clase_en_notion(nombre_clase, fecha_inicio, mensajes_procesados):
     url = "https://api.notion.com/v1/pages"
     periodos = calcular_periodos(fecha_inicio)
